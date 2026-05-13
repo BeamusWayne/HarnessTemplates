@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# bin/harness — AI coding agent 脚手架管理工具
+set -euo pipefail
+
+HARNESS_VERSION="2.0.0"
+HARNESS_REPO="BeamusWayne/HarnessTemplates"
+HARNESS_BRANCH="main"
+
+# ── Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info()    { echo -e "${BLUE}==>${NC} $*"; }
+log_success() { echo -e "${GREEN}  OK${NC} $*"; }
+log_warn()    { echo -e "${YELLOW}  !!${NC} $*"; }
+log_error()   { echo -e "${RED}  XX${NC} $*" >&2; }
+
+# ── Config helpers (grep/sed, no jq dependency)
+config_read_field() {
+  local config_path="$1"
+  local field="$2"
+  grep -o "\"${field}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$config_path" 2>/dev/null | \
+    sed 's/.*:.*"\(.*\)"/\1/' || true
+}
+
+config_read_array() {
+  local config_path="$1"
+  local field="$2"
+  sed -n "/\"${field}\"/,/\]/p" "$config_path" | \
+    grep -o '"[^"]*"' | tr -d '"' | grep -v "^${field}$" || true
+}
+
+config_write() {
+  local config_path="$1"
+  cat > "$config_path"
+}
+
+# ── Template URL helpers
+template_raw_url() {
+  local path="$1"
+  echo "https://raw.githubusercontent.com/${HARNESS_REPO}/${HARNESS_BRANCH}/${path}"
+}
+
+fetch_template_to() {
+  local path="$1"
+  local dest="$2"
+  curl -fsSL "$(template_raw_url "$path")" -o "$dest" 2>/dev/null
+}
+
+# ── Commands
+cmd_version() {
+  echo "harness v${HARNESS_VERSION}"
+}
+
+cmd_help() {
+  cat <<'HELP'
+harness — AI coding agent 脚手架管理工具
+
+用法: harness <command> [options]
+
+命令:
+  init              在当前项目中初始化 harness
+  upgrade           拉取上游模板更新
+  status            显示当前状态
+  check             运行结构完整性检查
+  diff <file>       查看文件的上下游差异
+  adopt <file>      接受上游版本
+  customize <file>  标记文件为已定制
+  uncustomize <file> 取消定制标记
+  new-plan <name>   创建执行计划
+  new-history <name> 创建变更记录
+  report            生成工作总结
+  doctor            诊断问题
+  version           显示版本
+  help              显示帮助
+
+选项:
+  --auto            upgrade 时跳过交互
+  --dry-run         只显示不执行
+  --fix             check 时自动修复
+  --local           从本地模板复制（开发/测试用）
+HELP
+}
+
+# ── Main dispatch
+case "${1:-help}" in
+  version|--version|-v) cmd_version ;;
+  help|--help|-h)       cmd_help ;;
+  *)                    echo "harness: unknown command '$1'" >&2; cmd_help >&2; exit 1 ;;
+esac
