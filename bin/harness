@@ -85,9 +85,118 @@ harness — AI coding agent 脚手架管理工具
 HELP
 }
 
+# ── Init command
+cmd_init() {
+  local use_local=false
+  # Parse flags
+  for arg in "$@"; do
+    case "$arg" in
+      --local) use_local=true ;;
+    esac
+  done
+
+  # Refuse to reinitialize
+  if [ -f ".harness/config.json" ]; then
+    log_error "Project already initialized (.harness/config.json exists)."
+    echo "  Run 'harness upgrade' to update templates." >&2
+    exit 1
+  fi
+
+  # Determine template source directory
+  local template_src
+  if [ "$use_local" = true ]; then
+    local harness_dir
+    harness_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    template_src="${harness_dir}/../.harness/templates"
+    if [ ! -d "$template_src" ]; then
+      log_error "Local templates not found at ${template_src}"
+      exit 1
+    fi
+  fi
+
+  local framework_files=(CLAUDE.md AGENTS.md init.sh evaluator-rubric.md)
+  local data_files=(feature_list.json claude-progress.md)
+
+  log_info "Initializing harness in $(pwd)..."
+
+  # Create .harness directory structure
+  mkdir -p .harness/templates
+  mkdir -p .harness/scripts
+  mkdir -p .harness/plans/active
+  mkdir -p .harness/plans/completed
+  mkdir -p .harness/histories
+
+  # Copy framework files to project root
+  for f in "${framework_files[@]}"; do
+    if [ "$use_local" = true ]; then
+      cp "${template_src}/${f}" "./${f}"
+    else
+      fetch_template_to "templates/${f}" "./${f}"
+    fi
+    log_success "Copied ${f}"
+  done
+
+  # Copy data files to project root
+  for f in "${data_files[@]}"; do
+    if [ "$use_local" = true ]; then
+      cp "${template_src}/${f}" "./${f}"
+    else
+      fetch_template_to "templates/${f}" "./${f}"
+    fi
+    log_success "Copied ${f}"
+  done
+
+  # Make init.sh executable
+  chmod +x init.sh
+  log_success "Made init.sh executable"
+
+  # Copy framework files to .harness/templates/ as original copies (for diff)
+  for f in "${framework_files[@]}"; do
+    if [ "$use_local" = true ]; then
+      cp "${template_src}/${f}" ".harness/templates/${f}"
+    else
+      fetch_template_to "templates/${f}" ".harness/templates/${f}"
+    fi
+  done
+
+  # Generate .harness/config.json
+  local project_name
+  project_name="$(basename "$(pwd)")"
+  local timestamp
+  timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  config_write ".harness/config.json" <<CONF
+{
+  "harness_version": "${HARNESS_VERSION}",
+  "initialized_at": "${timestamp}",
+  "project_name": "${project_name}",
+  "customized_files": [],
+  "file_categories": {
+    "framework": ["CLAUDE.md", "AGENTS.md", "init.sh", "evaluator-rubric.md", "autonomous-loop.md", "self-eval-trigger.md"],
+    "data": ["feature_list.json", "claude-progress.md"],
+    "scaffold": ["plan-template.md", "history-template.md"]
+  },
+  "upstream": {
+    "repo": "${HARNESS_REPO}",
+    "branch": "${HARNESS_BRANCH}"
+  }
+}
+CONF
+  log_success "Created .harness/config.json"
+
+  echo ""
+  log_info "Harness initialized successfully!"
+  echo ""
+  echo "  Next steps:"
+  echo "    1. Review and customize CLAUDE.md for your project"
+  echo "    2. Run ./init.sh to set up your development environment"
+  echo "    3. Use 'harness status' to check configuration"
+}
+
 # ── Main dispatch
 case "${1:-help}" in
   version|--version|-v) cmd_version ;;
   help|--help|-h)       cmd_help ;;
+  init)                 shift; cmd_init "$@" ;;
   *)                    echo "harness: unknown command '$1'" >&2; cmd_help >&2; exit 1 ;;
 esac
