@@ -131,7 +131,7 @@ cmd_init() {
     if [ "$use_local" = true ]; then
       cp "${template_src}/${f}" "./${f}"
     else
-      fetch_template_to "templates/${f}" "./${f}"
+      fetch_template_to ".harness/templates/${f}" "./${f}"
     fi
     log_success "Copied ${f}"
   done
@@ -141,7 +141,7 @@ cmd_init() {
     if [ "$use_local" = true ]; then
       cp "${template_src}/${f}" "./${f}"
     else
-      fetch_template_to "templates/${f}" "./${f}"
+      fetch_template_to ".harness/templates/${f}" "./${f}"
     fi
     log_success "Copied ${f}"
   done
@@ -155,7 +155,7 @@ cmd_init() {
     if [ "$use_local" = true ]; then
       cp "${template_src}/${f}" ".harness/templates/${f}"
     else
-      fetch_template_to "templates/${f}" ".harness/templates/${f}"
+      fetch_template_to ".harness/templates/${f}" ".harness/templates/${f}"
     fi
   done
 
@@ -471,7 +471,7 @@ cmd_upgrade() {
     files_to_fetch="$(config_read_array ".harness/config.json" "framework")"
 
     for f in $files_to_fetch; do
-      fetch_template_to "templates/${f}" "${upgrade_src}/${f}" || true
+      fetch_template_to ".harness/templates/${f}" "${upgrade_src}/${f}" || true
     done
   fi
 
