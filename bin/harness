@@ -592,6 +592,266 @@ cmd_upgrade() {
   fi
 }
 
+# ── New-plan command
+cmd_new_plan() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local name="${1:-}"
+  if [ -z "$name" ]; then
+    log_error "Usage: harness new-plan <name>"
+    exit 1
+  fi
+
+  local timestamp
+  timestamp="$(date +"%Y%m%d-%H%M")"
+  local plan_file=".harness/plans/active/${timestamp}-${name}.md"
+
+  mkdir -p ".harness/plans/active"
+
+  # Copy from template if available, otherwise inline template
+  local harness_dir
+  harness_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local template_file="${harness_dir}/../.harness/templates/plan-template.md"
+
+  if [ -f "$template_file" ]; then
+    cp "$template_file" "$plan_file"
+  else
+    cat > "$plan_file" <<'PLAN'
+# 执行计划：<任务标题>
+
+> 状态：active | completed | abandoned
+> 创建时间：YYYY-MM-DD HH:MM
+> 完成时间：-
+> 关联功能：feature-id-1, feature-id-2
+
+## 背景
+
+<为什么需要这个计划，解决什么问题>
+
+## 目标
+
+<完成后应该达到什么状态>
+
+## 步骤
+
+| # | 动作 | 状态 | 备注 |
+|---|------|------|------|
+| 1 | <第一步> | pending | |
+| 2 | <第二步> | pending | |
+| 3 | <第三步> | pending | |
+
+## 风险
+
+- <风险 1>：缓解措施
+
+## 验证
+
+- [ ] <验收条件 1>
+- [ ] <验收条件 2>
+
+## 完成后
+
+- [ ] 更新 feature_list.json 相关功能状态
+- [ ] 更新 claude-progress.md
+- [ ] 将本计划移至 completed/
+PLAN
+  fi
+
+  log_success "Created plan: ${plan_file}"
+}
+
+# ── New-history command
+cmd_new_history() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local name="${1:-}"
+  if [ -z "$name" ]; then
+    log_error "Usage: harness new-history <name>"
+    exit 1
+  fi
+
+  local timestamp
+  timestamp="$(date +"%Y%m%d-%H%M")"
+  local month_dir=".harness/histories/$(date +"%Y-%M")"
+  local hist_file="${month_dir}/${timestamp}-${name}.md"
+
+  mkdir -p "$month_dir"
+
+  # Copy from template if available, otherwise inline template
+  local harness_dir
+  harness_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local template_file="${harness_dir}/../.harness/templates/history-template.md"
+
+  if [ -f "$template_file" ]; then
+    cp "$template_file" "$hist_file"
+  else
+    cat > "$hist_file" <<'HISTORY'
+# 变更记录：<任务简述>
+
+> 日期：YYYY-MM-DD HH:MM
+> 类型：feat | fix | refactor | docs | test | chore
+> 关联功能：feature-id
+> 关联计划：plan-file-name（如有）
+
+## 改动
+
+<具体改了什么>
+
+## 原因
+
+<为什么改>
+
+## 验证
+
+<跑了什么验证，结果如何>
+
+## 影响范围
+
+<影响哪些文件/模块>
+
+## 回归风险
+
+<是否可能影响已有功能，为什么>
+HISTORY
+  fi
+
+  log_success "Created history: ${hist_file}"
+}
+
+# ── Report command
+cmd_report() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local project_name harness_version
+  project_name="$(config_read_field ".harness/config.json" "harness_version")"
+  harness_version="$(config_read_field ".harness/config.json" "harness_version")"
+  project_name="$(config_read_field ".harness/config.json" "project_name")"
+
+  echo ""
+  log_info "Harness Report: ${project_name}"
+  log_info "Version: ${harness_version}"
+  echo ""
+
+  # Feature progress
+  if [ -f "feature_list.json" ]; then
+    local passing=0 in_progress=0 blocked=0 not_started=0
+    passing="$(grep -c '"passing"' feature_list.json 2>/dev/null || echo 0)"
+    in_progress="$(grep -c '"in_progress"' feature_list.json 2>/dev/null || echo 0)"
+    blocked="$(grep -c '"blocked"' feature_list.json 2>/dev/null || echo 0)"
+    not_started="$(grep -c '"not_started"' feature_list.json 2>/dev/null || echo 0)"
+    local total=$((passing + in_progress + blocked + not_started))
+
+    echo "  功能进度 (${total} total):"
+    echo "    passing:      ${passing}"
+    echo "    in_progress:  ${in_progress}"
+    echo "    blocked:      ${blocked}"
+    echo "    not_started:  ${not_started}"
+  else
+    echo "  功能进度: feature_list.json not found"
+  fi
+
+  echo ""
+
+  # History count
+  local history_count=0
+  if [ -d ".harness/histories" ]; then
+    history_count="$(find .harness/histories -name "*.md" 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+  echo "  变更历史: ${history_count} file(s)"
+
+  echo ""
+
+  # Customized files count
+  local customized_count=0
+  customized_count="$(config_read_array ".harness/config.json" "customized_files" | wc -l | tr -d ' ')"
+  echo "  定制文件: ${customized_count}"
+
+  echo ""
+  log_info "Report complete."
+}
+
+# ── Doctor command
+cmd_doctor() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local issues=0
+
+  # Check version freshness
+  local local_version
+  local_version="$(config_read_field ".harness/config.json" "harness_version")"
+  if [ "$local_version" != "$HARNESS_VERSION" ]; then
+    log_warn "版本过旧: local=${local_version}, current=${HARNESS_VERSION}"
+    ((issues++)) || true
+  else
+    log_success "版本一致: ${HARNESS_VERSION}"
+  fi
+
+  # Check framework files exist
+  local framework_files=(CLAUDE.md AGENTS.md init.sh evaluator-rubric.md)
+  for f in "${framework_files[@]}"; do
+    if [ -f "$f" ]; then
+      log_success "$f 存在"
+    else
+      log_error "$f 缺失"
+      ((issues++)) || true
+    fi
+  done
+
+  # Check data files exist
+  local data_files=(feature_list.json claude-progress.md)
+  for f in "${data_files[@]}"; do
+    if [ -f "$f" ]; then
+      log_success "$f 存在"
+    else
+      log_error "$f 缺失"
+      ((issues++)) || true
+    fi
+  done
+
+  # Check customized files for pending updates (diff with template)
+  local customized_files
+  customized_files="$(config_read_array ".harness/config.json" "customized_files")"
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if [ -f ".harness/templates/${f}" ] && [ -f "$f" ]; then
+      if ! diff -q "$f" ".harness/templates/${f}" >/dev/null 2>&1; then
+        log_warn "${f}: 定制文件与模板有差异"
+      fi
+    fi
+  done <<< "$customized_files"
+
+  # Verify config.json format (basic check)
+  if grep -q '"harness_version"' ".harness/config.json" && \
+     grep -q '"project_name"' ".harness/config.json" && \
+     grep -q '"customized_files"' ".harness/config.json"; then
+    log_success "config.json 格式正确"
+  else
+    log_error "config.json 格式异常"
+    ((issues++)) || true
+  fi
+
+  # Summary
+  echo ""
+  if [ "$issues" -eq 0 ]; then
+    log_success "Doctor check passed: no issues found."
+  else
+    log_error "Doctor check found ${issues} issue(s)."
+    exit 1
+  fi
+}
+
 # ── Main dispatch
 case "${1:-help}" in
   version|--version|-v) cmd_version ;;
@@ -604,5 +864,9 @@ case "${1:-help}" in
   diff)                 shift; cmd_diff "$@" ;;
   adopt)                shift; cmd_adopt "$@" ;;
   upgrade)              shift; cmd_upgrade "$@" ;;
+  new-plan)             shift; cmd_new_plan "$@" ;;
+  new-history)          shift; cmd_new_history "$@" ;;
+  report)               shift; cmd_report "$@" ;;
+  doctor)               shift; cmd_doctor "$@" ;;
   *)                    echo "harness: unknown command '$1'" >&2; cmd_help >&2; exit 1 ;;
 esac
