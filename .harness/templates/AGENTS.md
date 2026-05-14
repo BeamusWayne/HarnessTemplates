@@ -26,9 +26,8 @@
 ## 必需文件
 
 - `feature_list.json`：功能状态的唯一事实来源
-- `claude-progress.md`：会话进度和当前已验证状态
+- `claude-progress.md`：会话进度、当前已验证状态与跨会话交接摘要（已合并 session-handoff 功能）
 - `init.sh`：统一的启动与验证入口
-- `session-handoff.md`：较长会话可选的交接摘要
 
 ## 完成定义
 
@@ -101,7 +100,6 @@
 | `.harness/reference/initializer-agent-playbook.md` | 首次初始化项目时 |
 | `.harness/reference/coding-agent-startup-flow.md` | 不确定开工流程时 |
 | `.harness/reference/prompt-calibration.md` | 调整根指令时 |
-| `.harness/templates/ARCHITECTURE.md` | 不确定文件放哪时 |
 | `.harness/templates/autonomous-loop.md` | 进入自治模式时 |
 | `.harness/templates/self-eval-trigger.md` | 自治模式需要自我评审时 |
 | `.harness/plans/active/` | 接手复杂任务时 |

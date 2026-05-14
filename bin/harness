@@ -29,13 +29,29 @@ config_read_field() {
 config_read_array() {
   local config_path="$1"
   local field="$2"
-  sed -n "/\"${field}\"/,/\]/p" "$config_path" | \
-    grep -o '"[^"]*"' | tr -d '"' | grep -v "^${field}$" || true
+  awk -v field="\"${field}\"" '
+    $0 ~ field { collecting=1 }
+    collecting {
+      buf = buf " " $0
+      if ($0 ~ /\]/) {
+        sub(/.*\[/, "", buf)
+        sub(/\].*/, "", buf)
+        n=split(buf, items, ",")
+        for (i=1; i<=n; i++) {
+          gsub(/[ "]/, "", items[i])
+          if (items[i]) print items[i]
+        }
+        collecting=0; buf=""
+      }
+    }
+  ' "$config_path" || true
 }
 
 config_write() {
   local config_path="$1"
-  cat > "$config_path"
+  local tmp="${config_path}.tmp"
+  cat > "$tmp"
+  mv "$tmp" "$config_path"
 }
 
 # ── Template URL helpers
@@ -47,7 +63,14 @@ template_raw_url() {
 fetch_template_to() {
   local path="$1"
   local dest="$2"
-  curl -fsSL "$(template_raw_url "$path")" -o "$dest" 2>/dev/null
+  local tmp="${dest}.tmp"
+  if curl -fsSL "$(template_raw_url "$path")" -o "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+    mv "$tmp" "$dest"
+    return 0
+  else
+    rm -f "$tmp"
+    return 1
+  fi
 }
 
 # ── Commands
@@ -114,8 +137,9 @@ cmd_init() {
     fi
   fi
 
-  local framework_files=(CLAUDE.md AGENTS.md init.sh evaluator-rubric.md)
+  local framework_files=(CLAUDE.md AGENTS.md init.sh evaluator-rubric.md autonomous-loop.md self-eval-trigger.md)
   local data_files=(feature_list.json claude-progress.md)
+  local scaffold_files=(plan-template.md history-template.md)
 
   log_info "Initializing harness in $(pwd)..."
 
@@ -129,11 +153,19 @@ cmd_init() {
   # Copy framework files to project root
   for f in "${framework_files[@]}"; do
     if [ "$use_local" = true ]; then
-      cp "${template_src}/${f}" "./${f}"
+      if [ -f "${template_src}/${f}" ]; then
+        cp "${template_src}/${f}" "./${f}"
+        log_success "Copied ${f}"
+      else
+        log_warn "Skipped ${f} (not in templates)"
+      fi
     else
-      fetch_template_to ".harness/templates/${f}" "./${f}"
+      if fetch_template_to ".harness/templates/${f}" "./${f}"; then
+        log_success "Copied ${f}"
+      else
+        log_warn "Skipped ${f} (fetch failed)"
+      fi
     fi
-    log_success "Copied ${f}"
   done
 
   # Copy data files to project root
@@ -153,11 +185,30 @@ cmd_init() {
   # Copy framework files to .harness/templates/ as original copies (for diff)
   for f in "${framework_files[@]}"; do
     if [ "$use_local" = true ]; then
-      cp "${template_src}/${f}" ".harness/templates/${f}"
+      [ -f "${template_src}/${f}" ] && cp "${template_src}/${f}" ".harness/templates/${f}"
     else
-      fetch_template_to ".harness/templates/${f}" ".harness/templates/${f}"
+      fetch_template_to ".harness/templates/${f}" ".harness/templates/${f}" 2>/dev/null || true
     fi
   done
+
+  # Copy scaffold files to .harness/templates/
+  for f in "${scaffold_files[@]}"; do
+    if [ "$use_local" = true ]; then
+      [ -f "${template_src}/${f}" ] && cp "${template_src}/${f}" ".harness/templates/${f}" && log_success "Copied scaffold ${f}"
+    else
+      fetch_template_to ".harness/templates/${f}" ".harness/templates/${f}" 2>/dev/null && log_success "Copied scaffold ${f}" || true
+    fi
+  done
+
+  # Copy validation scripts (local mode)
+  if [ "$use_local" = true ]; then
+    local scripts_src="${harness_dir}/../.harness/scripts"
+    if [ -d "$scripts_src" ]; then
+      for f in check-harness.sh ci.sh; do
+        [ -f "${scripts_src}/${f}" ] && cp "${scripts_src}/${f}" ".harness/scripts/${f}" && log_success "Copied script ${f}"
+      done
+    fi
+  fi
 
   # Generate .harness/config.json
   local project_name
@@ -255,15 +306,16 @@ cmd_check() {
   # Otherwise, basic check
   log_info "Running basic harness check..."
   local errors=0
-  local framework_files=(CLAUDE.md AGENTS.md init.sh evaluator-rubric.md)
-  for f in "${framework_files[@]}"; do
+  local framework_files
+  framework_files="$(config_read_array ".harness/config.json" "framework")"
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
     if [ -f "$f" ]; then
       log_success "$f exists"
     else
-      log_error "$f missing"
-      ((errors++)) || true
+      log_warn "$f missing"
     fi
-  done
+  done <<< "$framework_files"
 
   if [ "$errors" -gt 0 ]; then
     log_error "Check failed with ${errors} error(s)"
@@ -276,11 +328,11 @@ cmd_check() {
 _rewrite_customized_array() {
   local config_path="$1"
   shift
-  local files=("$@")
+  local files=("${@:+$@}")
 
   local new_line="  \"customized_files\": ["
   local first=true
-  for f in "${files[@]}"; do
+  for f in "${files[@]:-}"; do
     [ -z "$f" ] && continue
     if [ "$first" = true ]; then
       new_line="${new_line}\"${f}\""
@@ -366,7 +418,7 @@ cmd_uncustomize() {
     new_files+=("$f")
   done <<< "$current_files"
 
-  _rewrite_customized_array ".harness/config.json" "${new_files[@]}"
+  _rewrite_customized_array ".harness/config.json" ${new_files[@]+"${new_files[@]}"}
 
   if [ "$found" = true ]; then
     log_success "${filename} removed from customized files"
@@ -678,7 +730,7 @@ cmd_new_history() {
 
   local timestamp
   timestamp="$(date +"%Y%m%d-%H%M")"
-  local month_dir=".harness/histories/$(date +"%Y-%M")"
+  local month_dir=".harness/histories/$(date +"%Y-%m")"
   local hist_file="${month_dir}/${timestamp}-${name}.md"
 
   mkdir -p "$month_dir"
@@ -732,9 +784,8 @@ cmd_report() {
   fi
 
   local project_name harness_version
-  project_name="$(config_read_field ".harness/config.json" "harness_version")"
-  harness_version="$(config_read_field ".harness/config.json" "harness_version")"
   project_name="$(config_read_field ".harness/config.json" "project_name")"
+  harness_version="$(config_read_field ".harness/config.json" "harness_version")"
 
   echo ""
   log_info "Harness Report: ${project_name}"
@@ -799,26 +850,30 @@ cmd_doctor() {
   fi
 
   # Check framework files exist
-  local framework_files=(CLAUDE.md AGENTS.md init.sh evaluator-rubric.md)
-  for f in "${framework_files[@]}"; do
+  local framework_files
+  framework_files="$(config_read_array ".harness/config.json" "framework")"
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
     if [ -f "$f" ]; then
       log_success "$f 存在"
     else
       log_error "$f 缺失"
       ((issues++)) || true
     fi
-  done
+  done <<< "$framework_files"
 
   # Check data files exist
-  local data_files=(feature_list.json claude-progress.md)
-  for f in "${data_files[@]}"; do
+  local data_files
+  data_files="$(config_read_array ".harness/config.json" "data")"
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
     if [ -f "$f" ]; then
       log_success "$f 存在"
     else
       log_error "$f 缺失"
       ((issues++)) || true
     fi
-  done
+  done <<< "$data_files"
 
   # Check customized files for pending updates (diff with template)
   local customized_files

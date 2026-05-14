@@ -130,9 +130,8 @@ REPEAT (max: 3 次):
 | 文件 | 用途 |
 |------|------|
 | `feature_list.json` | 功能清单与状态 |
-| `claude-progress.md` | 进度日志 |
+| `claude-progress.md` | 进度日志与跨会话交接（已合并） |
 | `init.sh` | 环境初始化 |
-| `session-handoff.md` | 跨会话交接（需要时） |
 
 ## 参考文件
 
@@ -144,7 +143,6 @@ REPEAT (max: 3 次):
 | `.harness/reference/initializer-agent-playbook.md` | 首次初始化项目时 |
 | `.harness/reference/coding-agent-startup-flow.md` | 不确定开工流程时 |
 | `.harness/reference/prompt-calibration.md` | 调整根指令时 |
-| `.harness/templates/ARCHITECTURE.md` | 不确定文件放哪时 |
 | `.harness/templates/autonomous-loop.md` | 进入自治模式时 |
 | `.harness/templates/self-eval-trigger.md` | 自治模式需要自我评审时 |
 | `.harness/plans/active/` | 接手复杂任务时 |

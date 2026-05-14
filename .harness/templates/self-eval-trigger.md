@@ -32,4 +32,4 @@
 
 ## 与质量文档的联动
 
-每完成 3 个功能后，同时更新 quality-document.md 的评级。
+每完成 3 个功能后，同时更新 evaluator-rubric.md 的质量快照。
