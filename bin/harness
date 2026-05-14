@@ -200,15 +200,15 @@ cmd_init() {
     fi
   done
 
-  # Copy validation scripts (local mode)
-  if [ "$use_local" = true ]; then
-    local scripts_src="${harness_dir}/../.harness/scripts"
-    if [ -d "$scripts_src" ]; then
-      for f in check-harness.sh ci.sh; do
-        [ -f "${scripts_src}/${f}" ] && cp "${scripts_src}/${f}" ".harness/scripts/${f}" && log_success "Copied script ${f}"
-      done
+  # Copy validation scripts
+  for f in check-harness.sh ci.sh; do
+    if [ "$use_local" = true ]; then
+      local scripts_src="${harness_dir}/../.harness/scripts"
+      [ -f "${scripts_src}/${f}" ] && cp "${scripts_src}/${f}" ".harness/scripts/${f}" && log_success "Copied script ${f}"
+    else
+      fetch_template_to ".harness/scripts/${f}" ".harness/scripts/${f}" 2>/dev/null && log_success "Copied script ${f}" || true
     fi
-  fi
+  done
 
   # Generate .harness/config.json
   local project_name
@@ -636,6 +636,14 @@ cmd_upgrade() {
   echo "    conflicts (customized): ${conflicts}"
   echo "    data files preserved:   ${data_skipped}"
 
+  # Update version in config.json
+  if [ "$dry_run" = false ] && [ "$updated" -gt 0 ]; then
+    local tmp_config=".harness/config.json.tmp"
+    sed "s/\"harness_version\": \"[^\"]*\"/\"harness_version\": \"${HARNESS_VERSION}\"/" ".harness/config.json" > "$tmp_config"
+    mv "$tmp_config" ".harness/config.json"
+    log_success "Updated harness_version to ${HARNESS_VERSION}"
+  fi
+
   # Run check after upgrade
   echo ""
   if [ -f ".harness/scripts/check-harness.sh" ]; then
@@ -664,9 +672,12 @@ cmd_new_plan() {
   mkdir -p ".harness/plans/active"
 
   # Copy from template if available, otherwise inline template
-  local harness_dir
-  harness_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  local template_file="${harness_dir}/../.harness/templates/plan-template.md"
+  local template_file=".harness/templates/plan-template.md"
+  if [ ! -f "$template_file" ]; then
+    local harness_dir
+    harness_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    template_file="${harness_dir}/../.harness/templates/plan-template.md"
+  fi
 
   if [ -f "$template_file" ]; then
     cp "$template_file" "$plan_file"
@@ -736,9 +747,12 @@ cmd_new_history() {
   mkdir -p "$month_dir"
 
   # Copy from template if available, otherwise inline template
-  local harness_dir
-  harness_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  local template_file="${harness_dir}/../.harness/templates/history-template.md"
+  local template_file=".harness/templates/history-template.md"
+  if [ ! -f "$template_file" ]; then
+    local harness_dir
+    harness_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    template_file="${harness_dir}/../.harness/templates/history-template.md"
+  fi
 
   if [ -f "$template_file" ]; then
     cp "$template_file" "$hist_file"
