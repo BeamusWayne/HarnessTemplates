@@ -193,10 +193,416 @@ CONF
   echo "    3. Use 'harness status' to check configuration"
 }
 
+# ── Status command
+cmd_status() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local project_name harness_version
+  project_name="$(config_read_field ".harness/config.json" "project_name")"
+  harness_version="$(config_read_field ".harness/config.json" "harness_version")"
+
+  log_info "Project: ${project_name}"
+  log_info "Harness version: ${harness_version}"
+
+  # Count features by status
+  if [ -f "feature_list.json" ]; then
+    local passing=0 in_progress=0 blocked=0 not_started=0
+    passing="$(grep -c '"passing"' feature_list.json 2>/dev/null || echo 0)"
+    in_progress="$(grep -c '"in_progress"' feature_list.json 2>/dev/null || echo 0)"
+    blocked="$(grep -c '"blocked"' feature_list.json 2>/dev/null || echo 0)"
+    not_started="$(grep -c '"not_started"' feature_list.json 2>/dev/null || echo 0)"
+    local total=$((passing + in_progress + blocked + not_started))
+
+    echo ""
+    log_info "Feature progress (${total} total):"
+    echo "    passing:      ${passing}"
+    echo "    in_progress:  ${in_progress}"
+    echo "    blocked:      ${blocked}"
+    echo "    not_started:  ${not_started}"
+  else
+    log_warn "feature_list.json not found"
+  fi
+
+  # Count customized files
+  local customized_count=0
+  customized_count="$(config_read_array ".harness/config.json" "customized_files" | wc -l | tr -d ' ')"
+  echo ""
+  log_info "Customized files: ${customized_count}"
+}
+
+# ── Check command
+cmd_check() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local fix_flag=""
+  for arg in "$@"; do
+    case "$arg" in
+      --fix) fix_flag="--fix" ;;
+    esac
+  done
+
+  # If custom check script exists, use it
+  if [ -f ".harness/scripts/check-harness.sh" ]; then
+    exec .harness/scripts/check-harness.sh $fix_flag
+  fi
+
+  # Otherwise, basic check
+  log_info "Running basic harness check..."
+  local errors=0
+  local framework_files=(CLAUDE.md AGENTS.md init.sh evaluator-rubric.md)
+  for f in "${framework_files[@]}"; do
+    if [ -f "$f" ]; then
+      log_success "$f exists"
+    else
+      log_error "$f missing"
+      ((errors++)) || true
+    fi
+  done
+
+  if [ "$errors" -gt 0 ]; then
+    log_error "Check failed with ${errors} error(s)"
+    exit 1
+  fi
+  log_success "All framework files present"
+}
+
+# Helper: rewrite customized_files array in config
+_rewrite_customized_array() {
+  local config_path="$1"
+  shift
+  local files=("$@")
+
+  local new_line="  \"customized_files\": ["
+  local first=true
+  for f in "${files[@]}"; do
+    [ -z "$f" ] && continue
+    if [ "$first" = true ]; then
+      new_line="${new_line}\"${f}\""
+      first=false
+    else
+      new_line="${new_line}, \"${f}\""
+    fi
+  done
+  new_line="${new_line}],"
+
+  # Use awk to replace the customized_files line range
+  awk -v replacement="$new_line" '
+    /"customized_files"/ { in_arr=1; print replacement; next }
+    in_arr && /\]/ { in_arr=0; next }
+    !in_arr { print }
+  ' "$config_path" > "${config_path}.tmp"
+  mv "${config_path}.tmp" "$config_path"
+}
+
+# ── Customize / Uncustomize commands
+cmd_customize() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local filename="${1:-}"
+  if [ -z "$filename" ]; then
+    log_error "Usage: harness customize <filename>"
+    exit 1
+  fi
+
+  if [ ! -f "$filename" ]; then
+    log_error "File not found: ${filename}"
+    exit 1
+  fi
+
+  # Check if already customized
+  local already
+  already="$(config_read_array ".harness/config.json" "customized_files" | grep -xF "$filename" || true)"
+  if [ -n "$already" ]; then
+    log_warn "${filename} is already marked as customized"
+    return 0
+  fi
+
+  # Build new array: existing + new filename
+  local current_files
+  current_files="$(config_read_array ".harness/config.json" "customized_files")"
+  local all_files=()
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    all_files+=("$f")
+  done <<< "$current_files"
+  all_files+=("$filename")
+
+  _rewrite_customized_array ".harness/config.json" "${all_files[@]}"
+  log_success "${filename} marked as customized"
+}
+
+cmd_uncustomize() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local filename="${1:-}"
+  if [ -z "$filename" ]; then
+    log_error "Usage: harness uncustomize <filename>"
+    exit 1
+  fi
+
+  # Build new array without this file
+  local current_files
+  current_files="$(config_read_array ".harness/config.json" "customized_files")"
+  local new_files=()
+  local found=false
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if [ "$f" = "$filename" ]; then
+      found=true
+      continue
+    fi
+    new_files+=("$f")
+  done <<< "$current_files"
+
+  _rewrite_customized_array ".harness/config.json" "${new_files[@]}"
+
+  if [ "$found" = true ]; then
+    log_success "${filename} removed from customized files"
+  else
+    log_warn "${filename} was not in customized files"
+  fi
+}
+
+# ── Diff command
+cmd_diff() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local filename="${1:-}"
+  if [ -z "$filename" ]; then
+    log_error "Usage: harness diff <filename>"
+    exit 1
+  fi
+
+  if [ ! -f "$filename" ]; then
+    log_error "File not found: ${filename}"
+    exit 1
+  fi
+
+  if [ ! -f ".harness/templates/${filename}" ]; then
+    log_error "Template not found: .harness/templates/${filename}"
+    exit 1
+  fi
+
+  if diff -q "$filename" ".harness/templates/${filename}" >/dev/null 2>&1; then
+    log_success "${filename}: 一致 (identical)"
+  else
+    log_info "${filename}: differences found"
+    diff -u ".harness/templates/${filename}" "$filename" || true
+  fi
+}
+
+# ── Adopt command
+cmd_adopt() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local filename="${1:-}"
+  if [ -z "$filename" ]; then
+    log_error "Usage: harness adopt <filename>"
+    exit 1
+  fi
+
+  if [ ! -f ".harness/templates/${filename}" ]; then
+    log_error "Template not found: .harness/templates/${filename}"
+    exit 1
+  fi
+
+  cp ".harness/templates/${filename}" "./${filename}"
+  log_success "${filename}: adopted from template"
+
+  # Also uncustomize
+  cmd_uncustomize "$filename"
+}
+
+# ── Upgrade command
+cmd_upgrade() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local auto_mode=false dry_run=false local_mode=false
+  for arg in "$@"; do
+    case "$arg" in
+      --auto)    auto_mode=true ;;
+      --dry-run) dry_run=true ;;
+      --local)   local_mode=true ;;
+    esac
+  done
+
+  local current_version
+  current_version="$(config_read_field ".harness/config.json" "harness_version")"
+  log_info "Current version: ${current_version}"
+
+  # Determine upgrade source
+  local upgrade_src=""
+  if [ "$local_mode" = true ]; then
+    local harness_dir
+    harness_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    upgrade_src="${harness_dir}/../.harness/templates"
+    if [ ! -d "$upgrade_src" ]; then
+      log_error "Local templates not found at ${upgrade_src}"
+      exit 1
+    fi
+  else
+    # Fetch to temp dir
+    upgrade_src="$(mktemp -d)"
+    trap "rm -rf '$upgrade_src'" EXIT
+
+    log_info "Fetching upstream templates..."
+    local files_to_fetch
+    files_to_fetch="$(config_read_array ".harness/config.json" "framework")"
+
+    for f in $files_to_fetch; do
+      fetch_template_to "templates/${f}" "${upgrade_src}/${f}" || true
+    done
+  fi
+
+  # Get lists using config_read_array (handles nested JSON correctly)
+  local customized_files
+  customized_files="$(config_read_array ".harness/config.json" "customized_files")"
+  local framework_files
+  framework_files="$(config_read_array ".harness/config.json" "framework")"
+  local data_files
+  data_files="$(config_read_array ".harness/config.json" "data")"
+
+  local updated=0 skipped=0 conflicts=0 data_skipped=0
+
+  # Build a lookup set of data files to exclude from framework processing
+  local data_set=""
+  for f in $data_files; do
+    [ -z "$f" ] && continue
+    data_set="${data_set}|${f}|"
+  done
+
+  # Never touch data files
+  log_info "Data files (not upgraded):"
+  for f in $data_files; do
+    [ -z "$f" ] && continue
+    echo "    skip: ${f}"
+    ((data_skipped++)) || true
+  done
+
+  echo ""
+  log_info "Checking framework files..."
+
+  for f in $framework_files; do
+    [ -z "$f" ] && continue
+
+    # Skip if this is actually a data file
+    case "$data_set" in
+      *"|${f}|"*) continue ;;
+    esac
+
+    local upstream_file="${upgrade_src}/${f}"
+
+    # Skip if no upstream version available
+    [ -f "$upstream_file" ] || continue
+
+    # Skip if project doesn't have the file
+    [ -f "./${f}" ] || continue
+
+    # Check if identical
+    if diff -q "./${f}" "$upstream_file" >/dev/null 2>&1; then
+      echo "    skip: ${f} (no changes)"
+      ((skipped++)) || true
+      continue
+    fi
+
+    # Check if customized
+    local is_customized=false
+    while IFS= read -r cf; do
+      [ "$cf" = "$f" ] && is_customized=true && break
+    done <<< "$customized_files"
+
+    if [ "$is_customized" = true ]; then
+      if [ "$auto_mode" = true ]; then
+        log_warn "  skip: ${f} (customized, use --dry-run to see diff)"
+        ((conflicts++)) || true
+      else
+        # Interactive mode
+        log_warn "  conflict: ${f} (customized)"
+        diff -u "./${f}" "$upstream_file" || true
+        echo ""
+        echo -n "  [a]dopt / [k]eep / [s]kip? "
+        read -r answer
+        case "$answer" in
+          a|A)
+            if [ "$dry_run" = false ]; then
+              cp "$upstream_file" "./${f}"
+              cp "$upstream_file" ".harness/templates/${f}"
+              cmd_uncustomize "$f"
+            fi
+            log_success "  adopted: ${f}"
+            ((updated++)) || true
+            ;;
+          k|K)
+            if [ "$dry_run" = false ]; then
+              cp "$upstream_file" ".harness/templates/${f}"
+            fi
+            echo "    kept: ${f}"
+            ((conflicts++)) || true
+            ;;
+          *)
+            echo "    skipped: ${f}"
+            ((conflicts++)) || true
+            ;;
+        esac
+      fi
+    else
+      # Not customized, auto-update
+      if [ "$dry_run" = false ]; then
+        cp "$upstream_file" "./${f}"
+        cp "$upstream_file" ".harness/templates/${f}"
+      fi
+      log_success "  updated: ${f}"
+      ((updated++)) || true
+    fi
+  done
+
+  echo ""
+  log_info "Upgrade report:"
+  echo "    updated:  ${updated}"
+  echo "    skipped:  ${skipped}"
+  echo "    conflicts (customized): ${conflicts}"
+  echo "    data files preserved:   ${data_skipped}"
+
+  # Run check after upgrade
+  echo ""
+  if [ -f ".harness/scripts/check-harness.sh" ]; then
+    log_info "Running post-upgrade check..."
+    .harness/scripts/check-harness.sh || true
+  fi
+}
+
 # ── Main dispatch
 case "${1:-help}" in
   version|--version|-v) cmd_version ;;
   help|--help|-h)       cmd_help ;;
   init)                 shift; cmd_init "$@" ;;
+  status)               shift; cmd_status "$@" ;;
+  check)                shift; cmd_check "$@" ;;
+  customize)            shift; cmd_customize "$@" ;;
+  uncustomize)          shift; cmd_uncustomize "$@" ;;
+  diff)                 shift; cmd_diff "$@" ;;
+  adopt)                shift; cmd_adopt "$@" ;;
+  upgrade)              shift; cmd_upgrade "$@" ;;
   *)                    echo "harness: unknown command '$1'" >&2; cmd_help >&2; exit 1 ;;
 esac
