@@ -14,24 +14,34 @@ read_cmd() {
   echo "${value:-$default}"
 }
 
-INSTALL_CMD="$(read_cmd install 'npm install')"
-VERIFY_CMD="$(read_cmd verify 'npm test')"
-START_CMD="$(read_cmd start 'npm run dev')"
+INSTALL_CMD="$(read_cmd install '')"
+VERIFY_CMD="$(read_cmd verify '')"
+START_CMD="$(read_cmd start '')"
 
 case "${1:-default}" in
   default)
     echo "==> 当前目录: $PWD"
-    echo "==> 同步依赖"
-    eval "$INSTALL_CMD"
-    echo "==> 运行基础验证"
-    eval "$VERIFY_CMD"
-    echo "==> 启动命令"
-    echo "    $START_CMD"
-    if [ "${RUN_START_COMMAND:-0}" = "1" ]; then
-      echo "==> 启动应用"
-      eval "exec $START_CMD"
+    if [ -n "$INSTALL_CMD" ]; then
+      echo "==> 同步依赖"
+      eval "$INSTALL_CMD"
+    else
+      echo "==> 跳过依赖安装 (未检测到项目类型，可在 .harness/config.json 中配置)"
     fi
-    echo "如果希望 init.sh 直接启动应用，请设置 RUN_START_COMMAND=1。"
+    if [ -n "$VERIFY_CMD" ]; then
+      echo "==> 运行基础验证"
+      eval "$VERIFY_CMD"
+    else
+      echo "==> 跳过验证 (未检测到项目类型，可在 .harness/config.json 中配置)"
+    fi
+    if [ -n "$START_CMD" ]; then
+      echo "==> 启动命令"
+      echo "    $START_CMD"
+      if [ "${RUN_START_COMMAND:-0}" = "1" ]; then
+        echo "==> 启动应用"
+        eval "exec $START_CMD"
+      fi
+      echo "如果希望 init.sh 直接启动应用，请设置 RUN_START_COMMAND=1。"
+    fi
     ;;
 
   health)
@@ -42,7 +52,7 @@ case "${1:-default}" in
     else
       echo "  OK: 端口 $PORT 可用"
     fi
-    if eval "$VERIFY_CMD" > /dev/null 2>&1; then
+    if [ -n "$VERIFY_CMD" ] && eval "$VERIFY_CMD" > /dev/null 2>&1; then
       echo "  OK: 基础验证通过"
     else
       echo "FAIL: 基础验证失败"; exit 1
@@ -51,8 +61,12 @@ case "${1:-default}" in
     ;;
 
   verify)
-    echo "==> 运行功能验证"
-    eval "$VERIFY_CMD"
+    if [ -n "$VERIFY_CMD" ]; then
+      echo "==> 运行功能验证"
+      eval "$VERIFY_CMD"
+    else
+      echo "==> 跳过验证 (未配置 verify 命令)"
+    fi
     ;;
 
   *)

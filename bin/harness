@@ -269,9 +269,9 @@ cmd_init() {
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
   # Detect project commands
-  local install_cmd="npm install"
-  local verify_cmd="npm test"
-  local start_cmd="npm run dev"
+  local install_cmd=""
+  local verify_cmd=""
+  local start_cmd=""
   if [ -f "pyproject.toml" ]; then
     install_cmd="pip install -e ."; verify_cmd="pytest"; start_cmd=""
   elif [ -f "requirements.txt" ]; then
@@ -310,9 +310,15 @@ CONF
   log_info "Harness initialized successfully!"
   echo ""
   echo "  Next steps:"
-  echo "    1. Review and customize CLAUDE.md for your project"
-  echo "    2. Run ./init.sh to set up your development environment"
-  echo "    3. Use 'harness status' to check configuration"
+  echo "    1. 打开 Claude Code (或你的 AI agent)"
+  echo "    2. 告诉 AI 你想做什么，例如：\"我要做一个带用户认证的博客系统\""
+  echo "    3. AI 会帮你拆解功能并写入 feature_list.json"
+  echo "    4. 然后说\"开始工作\"，AI 按功能列表自动迭代"
+  echo ""
+  echo "  日常维护:"
+  echo "    harness status    # 查看进度"
+  echo "    harness upgrade   # 更新模板"
+  echo "    harness doctor    # 诊断问题"
 }
 
 # ── Status command
