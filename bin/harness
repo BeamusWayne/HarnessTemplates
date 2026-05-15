@@ -227,6 +227,26 @@ cmd_init() {
   # Create session-start marker
   touch .harness/.session-start
 
+  # Install git pre-commit hook if .git exists
+  if [ -d ".git" ]; then
+    local hook_src
+    if [ "$use_local" = true ]; then
+      hook_src="${harness_dir}/../.harness/scripts/git-pre-commit.sh"
+    else
+      hook_src=""
+      local hook_tmp=".harness/scripts/git-pre-commit.sh.tmp"
+      if fetch_template_to ".harness/scripts/git-pre-commit.sh" "$hook_tmp"; then
+        mv "$hook_tmp" ".harness/scripts/git-pre-commit.sh"
+        hook_src=".harness/scripts/git-pre-commit.sh"
+      fi
+    fi
+    if [ -n "$hook_src" ] && [ -f "$hook_src" ]; then
+      cp "$hook_src" ".git/hooks/pre-commit"
+      chmod +x ".git/hooks/pre-commit"
+      log_success "Installed git pre-commit hook"
+    fi
+  fi
+
   # Generate .harness/config.json
   local project_name
   project_name="$(basename "$(pwd)")"
