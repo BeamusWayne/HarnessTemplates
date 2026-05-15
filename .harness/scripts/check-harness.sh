@@ -23,8 +23,15 @@ if [ -f "init.sh" ]; then
 fi
 echo "  [格式检查]"
 if [ -f "feature_list.json" ]; then
-  if python3 -c "import json; json.load(open('feature_list.json'))" 2>/dev/null || node -e "JSON.parse(require('fs').readFileSync('feature_list.json','utf8'))" 2>/dev/null; then echo "    OK: feature_list.json 是合法 JSON"
-  else echo "    FAIL: feature_list.json 不是合法 JSON"; ((errors++)) || true; fi
+  if command -v python3 >/dev/null 2>&1; then
+    if python3 -c "import json; json.load(open('feature_list.json'))" 2>/dev/null; then echo "    OK: feature_list.json 是合法 JSON"
+    else echo "    FAIL: feature_list.json 不是合法 JSON"; ((errors++)) || true; fi
+  elif command -v node >/dev/null 2>&1; then
+    if node -e "JSON.parse(require('fs').readFileSync('feature_list.json','utf8'))" 2>/dev/null; then echo "    OK: feature_list.json 是合法 JSON"
+    else echo "    FAIL: feature_list.json 不是合法 JSON"; ((errors++)) || true; fi
+  else
+    echo "    SKIP: feature_list.json JSON 验证 (需要 python3 或 node)"
+  fi
 fi
 echo ""; echo "==> 结果: ${errors} 错误, ${warnings} 警告"
 [ "$errors" -gt 0 ] && exit 1; exit 0

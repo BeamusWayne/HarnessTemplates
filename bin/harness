@@ -398,7 +398,8 @@ cmd_check() {
     if [ -f "$f" ]; then
       log_success "$f exists"
     else
-      log_warn "$f missing"
+      log_error "$f missing"
+      ((errors++)) || true
     fi
   done <<< "$framework_files"
 
