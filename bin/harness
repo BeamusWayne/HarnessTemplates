@@ -97,6 +97,7 @@ harness — AI coding agent 脚手架管理工具
   new-history <name> 创建变更记录
   report            生成工作总结
   doctor            诊断问题
+  changelog         显示版本变更日志
   version           显示版本
   help              显示帮助
 
@@ -339,6 +340,20 @@ cmd_status() {
   customized_count="$(config_read_array ".harness/config.json" "customized_files" | wc -l | tr -d ' ')"
   echo ""
   log_info "Customized files: ${customized_count}"
+
+  # Check for newer version
+  echo ""
+  log_info "Checking for updates..."
+  local latest_version
+  latest_version="$(curl -fsSL "https://raw.githubusercontent.com/${HARNESS_REPO}/${HARNESS_BRANCH}/bin/harness" 2>/dev/null | grep '^HARNESS_VERSION=' | head -1 | sed 's/.*="//;s/"//' || true)"
+  if [ -z "$latest_version" ]; then
+    log_warn "无法检查远程版本 (网络不可用)"
+  elif [ "$latest_version" != "$harness_version" ]; then
+    log_warn "有新版本可用: ${latest_version} (当前: ${harness_version})"
+    echo "    运行 'harness upgrade' 更新"
+  else
+    log_success "版本已是最新: ${harness_version}"
+  fi
 }
 
 # ── Check command
@@ -678,11 +693,14 @@ cmd_upgrade() {
       fi
     else
       # Not customized, auto-update
-      if [ "$dry_run" = false ]; then
+      if [ "$dry_run" = true ]; then
+        log_info "  would update: ${f}"
+        diff -u "./${f}" "$upstream_file" 2>/dev/null || true
+      else
         cp "$upstream_file" "./${f}"
         cp "$upstream_file" ".harness/templates/${f}"
+        log_success "  updated: ${f}"
       fi
-      log_success "  updated: ${f}"
       ((updated++)) || true
     fi
   done
@@ -1035,6 +1053,31 @@ cmd_doctor() {
   fi
 }
 
+# ── Changelog command
+cmd_changelog() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local current_version
+  current_version="$(config_read_field ".harness/config.json" "harness_version")"
+
+  log_info "Fetching changelog (current: v${current_version})..."
+
+  local commits
+  commits="$(curl -fsSL "https://api.github.com/repos/${HARNESS_REPO}/commits?sha=${HARNESS_BRANCH}&per_page=20" 2>/dev/null || true)"
+
+  if [ -z "$commits" ]; then
+    log_warn "无法获取远程提交记录 (网络不可用)"
+    exit 0
+  fi
+
+  echo "$commits" | grep -o '"message": *"[^"]*"' | sed 's/"message": *"//;s/"$//' | head -20
+  echo ""
+  log_info "显示最近 20 条提交。运行 'harness upgrade' 更新。"
+}
+
 # ── Main dispatch
 case "${1:-help}" in
   version|--version|-v) cmd_version ;;
@@ -1051,5 +1094,6 @@ case "${1:-help}" in
   new-history)          shift; cmd_new_history "$@" ;;
   report)               shift; cmd_report "$@" ;;
   doctor)               shift; cmd_doctor "$@" ;;
+  changelog)            shift; cmd_changelog "$@" ;;
   *)                    echo "harness: unknown command '$1'" >&2; cmd_help >&2; exit 1 ;;
 esac
