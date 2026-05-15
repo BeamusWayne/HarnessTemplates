@@ -11,7 +11,8 @@
 3. 读取 `feature_list.json`，选择优先级最高的未完成功能。
 4. 用 `git log --oneline -5` 看最近提交。
 5. 运行 `./init.sh`。
-6. 在开始新功能前，先跑必需的 smoke test 或端到端验证。
+6. 运行 `touch .harness/.session-start` 刷新会话标记。
+7. 在开始新功能前，先跑必需的 smoke test 或端到端验证。
 
 如果基础验证一开始就失败，先修基础状态，不要在坏的起点上继续叠新功能。
 

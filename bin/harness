@@ -202,6 +202,18 @@ cmd_init() {
     fi
   done
 
+  # Copy reference docs
+  local ref_files=(method-map.md initializer-agent-playbook.md coding-agent-startup-flow.md prompt-calibration.md index.md)
+  mkdir -p .harness/reference
+  for f in "${ref_files[@]}"; do
+    if [ "$use_local" = true ]; then
+      local ref_src="${harness_dir}/../.harness/reference/${f}"
+      [ -f "$ref_src" ] && cp "$ref_src" ".harness/reference/${f}" && log_success "Copied reference ${f}"
+    else
+      fetch_template_to ".harness/reference/${f}" ".harness/reference/${f}" 2>/dev/null && log_success "Copied reference ${f}" || true
+    fi
+  done
+
   # Copy validation scripts
   for f in check-harness.sh ci.sh hook-guard.sh; do
     if [ "$use_local" = true ]; then
@@ -231,6 +243,7 @@ cmd_init() {
 
   # Install git pre-commit hook if .git exists
   if [ -d ".git" ]; then
+    mkdir -p .git/hooks
     local hook_src
     if [ "$use_local" = true ]; then
       hook_src="${harness_dir}/../.harness/scripts/git-pre-commit.sh"
@@ -729,6 +742,7 @@ cmd_upgrade() {
         cp "$script_src" ".harness/scripts/${f}"
       fi
       log_success "  updated script: ${f}"
+      ((updated++)) || true
     fi
   done
 
@@ -747,6 +761,7 @@ cmd_upgrade() {
       cp "$settings_src" ".claude/settings.local.json"
     fi
     log_success "  updated .claude/settings.local.json"
+    ((updated++)) || true
   fi
 
   # Upgrade git pre-commit hook (if harness-managed)
@@ -758,6 +773,7 @@ cmd_upgrade() {
         chmod +x ".git/hooks/pre-commit"
       fi
       log_success "  updated git pre-commit hook"
+      ((updated++)) || true
     fi
   fi
 

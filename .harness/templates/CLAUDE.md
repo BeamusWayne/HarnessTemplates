@@ -66,7 +66,8 @@
 3. 读取 `feature_list.json`
 4. 用 `git log --oneline -5` 查看最近提交
 5. 运行 `./init.sh`
-6. 检查基础 smoke test 或端到端路径是否已经损坏
+6. 运行 `touch .harness/.session-start` 刷新会话标记
+7. 检查基础 smoke test 或端到端路径是否已经损坏
 
 然后只选择一个未完成功能，围绕它工作，直到它被验证通过，或者被明确记录为 blocked。
 
