@@ -110,11 +110,12 @@ HELP
 
 # ── Init command
 cmd_init() {
-  local use_local=false
+  local use_local=false non_interactive=false
   # Parse flags
   for arg in "$@"; do
     case "$arg" in
-      --local) use_local=true ;;
+      --local)           use_local=true ;;
+      --non-interactive) non_interactive=true ;;
     esac
   done
 
@@ -253,12 +254,31 @@ cmd_init() {
   local timestamp
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
+  # Detect project commands
+  local install_cmd="npm install"
+  local verify_cmd="npm test"
+  local start_cmd="npm run dev"
+  if [ -f "pyproject.toml" ]; then
+    install_cmd="pip install -e ."; verify_cmd="pytest"; start_cmd=""
+  elif [ -f "requirements.txt" ]; then
+    install_cmd="pip install -r requirements.txt"; verify_cmd="pytest"; start_cmd=""
+  elif [ -f "Cargo.toml" ]; then
+    install_cmd="cargo build"; verify_cmd="cargo test"; start_cmd="cargo run"
+  elif [ -f "go.mod" ]; then
+    install_cmd="go mod download"; verify_cmd="go test ./..."; start_cmd="go run ."
+  fi
+
   config_write ".harness/config.json" <<CONF
 {
   "harness_version": "${HARNESS_VERSION}",
   "initialized_at": "${timestamp}",
   "project_name": "${project_name}",
   "customized_files": [],
+  "project_commands": {
+    "install": "${install_cmd}",
+    "verify": "${verify_cmd}",
+    "start": "${start_cmd}"
+  },
   "file_categories": {
     "framework": ["CLAUDE.md", "AGENTS.md", "init.sh", "evaluator-rubric.md", "autonomous-loop.md", "self-eval-trigger.md"],
     "data": ["feature_list.json", "claude-progress.md"],
