@@ -201,7 +201,7 @@ cmd_init() {
   done
 
   # Copy validation scripts
-  for f in check-harness.sh ci.sh; do
+  for f in check-harness.sh ci.sh hook-guard.sh; do
     if [ "$use_local" = true ]; then
       local scripts_src="${harness_dir}/../.harness/scripts"
       [ -f "${scripts_src}/${f}" ] && cp "${scripts_src}/${f}" ".harness/scripts/${f}" && log_success "Copied script ${f}"
@@ -209,6 +209,23 @@ cmd_init() {
       fetch_template_to ".harness/scripts/${f}" ".harness/scripts/${f}" 2>/dev/null && log_success "Copied script ${f}" || true
     fi
   done
+
+  # Deploy .claude/settings.local.json (hooks)
+  mkdir -p .claude
+  if [ "$use_local" = true ]; then
+    local settings_src="${harness_dir}/../.harness/templates/.claude/settings.local.json"
+    if [ -f "$settings_src" ]; then
+      cp "$settings_src" ".claude/settings.local.json"
+      log_success "Deployed .claude/settings.local.json"
+    fi
+  else
+    if fetch_template_to ".claude/settings.local.json" ".claude/settings.local.json"; then
+      log_success "Deployed .claude/settings.local.json"
+    fi
+  fi
+
+  # Create session-start marker
+  touch .harness/.session-start
 
   # Generate .harness/config.json
   local project_name

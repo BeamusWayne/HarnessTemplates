@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$PROJECT_ROOT\" && .harness/scripts/hook-guard.sh post-edit"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$PROJECT_ROOT\" && .harness/scripts/hook-guard.sh pre-stop"
+          }
+        ]
+      }
+    ]
+  }
+}
