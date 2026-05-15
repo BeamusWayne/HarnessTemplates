@@ -49,6 +49,7 @@ your-project/
 | `harness new-history <name>` | 创建变更记录 |
 | `harness report` | 生成工作总结（功能进度、变更统计） |
 | `harness doctor` | 诊断问题（版本、文件、配置） |
+| `harness changelog` | 显示版本变更日志 |
 
 ### 常用选项
 
@@ -56,6 +57,7 @@ your-project/
 - `--dry-run` — 只显示将做什么，不实际执行
 - `--fix` — check 时自动修复问题（CRLF、权限）
 - `--local` — 从本地模板复制（开发/测试用）
+- `--non-interactive` — init 时跳过交互，使用自动检测的项目配置
 
 ## 模板文件
 
@@ -139,6 +141,18 @@ harness report                    # 工作总结
 - harness CLI 只使用 GitHub 公开 API，不需要 token
 - 模板中的 init.sh 使用保守默认值，请审查后再运行
 - 所有写操作使用临时文件，确认后再移到目标位置
+
+## Hooks 自动化
+
+初始化后，harness 会自动配置以下强制机制：
+
+| 机制 | 触发时机 | 作用 |
+|------|---------|------|
+| Claude Code PostToolUse hook | 每次代码修改后 | 检查是否有 in_progress 的功能 |
+| Claude Code Stop hook | 会话结束前 | 检查 claude-progress.md 是否已更新 |
+| Git pre-commit hook | 每次 git commit 前 | 验证 feature_list.json 和 claude-progress.md 完整性 |
+
+这些机制确保 agent 的行为符合 harness 工作规则，不依赖 prompt 驱动。
 
 ## 系统要求
 

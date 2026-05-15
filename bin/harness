@@ -2,7 +2,7 @@
 # bin/harness — AI coding agent 脚手架管理工具
 set -euo pipefail
 
-HARNESS_VERSION="2.0.0"
+HARNESS_VERSION="2.1.0"
 HARNESS_REPO="BeamusWayne/HarnessTemplates"
 HARNESS_BRANCH="main"
 
