@@ -12,7 +12,7 @@ for f in "${REQUIRED_FILES[@]}"; do
   else echo "    MISSING: $f"; ((errors++)) || true; fi
 done
 echo "  [框架文件]"
-for f in evaluator-rubric.md; do
+for f in evaluator-rubric.md autonomous-loop.md self-eval-trigger.md; do
   if [ -f "$f" ]; then echo "    OK: $f"
   else echo "    WARN: $f (可选)"; ((warnings++)) || true; fi
 done

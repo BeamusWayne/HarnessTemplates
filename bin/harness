@@ -233,7 +233,7 @@ cmd_init() {
       log_success "Deployed .claude/settings.local.json"
     fi
   else
-    if fetch_template_to ".claude/settings.local.json" ".claude/settings.local.json"; then
+    if fetch_template_to ".harness/templates/.claude/settings.local.json" ".claude/settings.local.json"; then
       log_success "Deployed .claude/settings.local.json"
     fi
   fi
@@ -751,7 +751,7 @@ cmd_upgrade() {
   if [ "$local_mode" = true ]; then
     settings_src="${harness_dir}/../.harness/templates/.claude/settings.local.json"
   else
-    if fetch_template_to ".claude/settings.local.json" "${upgrade_src}/settings.local.json" 2>/dev/null; then
+    if fetch_template_to ".harness/templates/.claude/settings.local.json" "${upgrade_src}/settings.local.json" 2>/dev/null; then
       settings_src="${upgrade_src}/settings.local.json"
     fi
   fi
@@ -776,6 +776,40 @@ cmd_upgrade() {
       ((updated++)) || true
     fi
   fi
+
+  # Upgrade reference docs
+  log_info "Checking reference docs..."
+  local ref_files=(method-map.md initializer-agent-playbook.md coding-agent-startup-flow.md prompt-calibration.md index.md)
+  mkdir -p .harness/reference
+  for f in "${ref_files[@]}"; do
+    if [ "$local_mode" = true ]; then
+      local ref_src="${harness_dir}/../.harness/reference/${f}"
+      if [ -f "$ref_src" ]; then
+        if [ ! -f ".harness/reference/${f}" ] || ! diff -q "$ref_src" ".harness/reference/${f}" >/dev/null 2>&1; then
+          if [ "$dry_run" = false ]; then
+            cp "$ref_src" ".harness/reference/${f}"
+          fi
+          log_success "  updated reference: ${f}"
+          ((updated++)) || true
+        fi
+      fi
+    else
+      local ref_tmp=".harness/reference/${f}.tmp"
+      if fetch_template_to ".harness/reference/${f}" "$ref_tmp" 2>/dev/null; then
+        if [ ! -f ".harness/reference/${f}" ] || ! diff -q "$ref_tmp" ".harness/reference/${f}" >/dev/null 2>&1; then
+          if [ "$dry_run" = false ]; then
+            mv "$ref_tmp" ".harness/reference/${f}"
+          else
+            rm -f "$ref_tmp"
+          fi
+          log_success "  updated reference: ${f}"
+          ((updated++)) || true
+        else
+          rm -f "$ref_tmp"
+        fi
+      fi
+    fi
+  done
 
   echo ""
   log_info "Upgrade report:"
@@ -1057,6 +1091,33 @@ cmd_doctor() {
   else
     log_error "config.json 格式异常"
     ((issues++)) || true
+  fi
+
+  # Check scripts
+  local required_scripts=(hook-guard.sh check-harness.sh)
+  for f in "${required_scripts[@]}"; do
+    if [ -f ".harness/scripts/${f}" ]; then
+      log_success ".harness/scripts/${f} 存在"
+    else
+      log_error ".harness/scripts/${f} 缺失"
+      ((issues++)) || true
+    fi
+  done
+
+  # Check .claude/settings.local.json
+  if [ -f ".claude/settings.local.json" ]; then
+    log_success ".claude/settings.local.json 存在"
+  else
+    log_warn ".claude/settings.local.json 缺失 (hooks 未部署)"
+  fi
+
+  # Check git pre-commit hook
+  if [ -d ".git" ]; then
+    if [ -f ".git/hooks/pre-commit" ] && grep -q "managed by harness" ".git/hooks/pre-commit" 2>/dev/null; then
+      log_success "git pre-commit hook 已安装"
+    else
+      log_warn "git pre-commit hook 未安装 (运行 harness upgrade 安装)"
+    fi
   fi
 
   # Summary

@@ -5,12 +5,16 @@ set -euo pipefail
 errors=0
 
 if [ -f "feature_list.json" ]; then
-  if python3 -c "import json,sys; json.load(open('feature_list.json'))" 2>/dev/null || \
-     node -e "JSON.parse(require('fs').readFileSync('feature_list.json','utf8'))" 2>/dev/null; then
-    :
-  else
-    echo "[harness] feature_list.json 不是合法 JSON" >&2
-    errors=$((errors + 1))
+  if command -v python3 >/dev/null 2>&1; then
+    if ! python3 -c "import json,sys; json.load(open('feature_list.json'))" 2>/dev/null; then
+      echo "[harness] feature_list.json 不是合法 JSON" >&2
+      errors=$((errors + 1))
+    fi
+  elif command -v node >/dev/null 2>&1; then
+    if ! node -e "JSON.parse(require('fs').readFileSync('feature_list.json','utf8'))" 2>/dev/null; then
+      echo "[harness] feature_list.json 不是合法 JSON" >&2
+      errors=$((errors + 1))
+    fi
   fi
 else
   echo "[harness] feature_list.json 不存在" >&2
