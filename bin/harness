@@ -556,6 +556,9 @@ cmd_upgrade() {
     esac
   done
 
+  local harness_dir
+  harness_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
   local current_version
   current_version="$(config_read_field ".harness/config.json" "harness_version")"
   log_info "Current version: ${current_version}"
@@ -563,8 +566,6 @@ cmd_upgrade() {
   # Determine upgrade source
   local upgrade_src=""
   if [ "$local_mode" = true ]; then
-    local harness_dir
-    harness_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     upgrade_src="${harness_dir}/../.harness/templates"
     if [ ! -d "$upgrade_src" ]; then
       log_error "Local templates not found at ${upgrade_src}"
@@ -685,6 +686,62 @@ cmd_upgrade() {
       ((updated++)) || true
     fi
   done
+
+  echo ""
+
+  # Upgrade scripts (always update, backup first)
+  log_info "Checking scripts..."
+  local harness_scripts=(check-harness.sh ci.sh hook-guard.sh git-pre-commit.sh)
+  for f in "${harness_scripts[@]}"; do
+    local script_src=""
+    if [ "$local_mode" = true ]; then
+      local scripts_dir="${harness_dir}/../.harness/scripts"
+      [ -f "${scripts_dir}/${f}" ] && script_src="${scripts_dir}/${f}"
+    else
+      if fetch_template_to ".harness/scripts/${f}" "${upgrade_src}/${f}" 2>/dev/null; then
+        script_src="${upgrade_src}/${f}"
+      fi
+    fi
+    if [ -n "$script_src" ] && [ -f "$script_src" ]; then
+      if [ -f ".harness/scripts/${f}" ]; then
+        mkdir -p ".harness/scripts/.backup"
+        cp ".harness/scripts/${f}" ".harness/scripts/.backup/${f}.$(date +%Y%m%d%H%M%S)"
+      fi
+      if [ "$dry_run" = false ]; then
+        cp "$script_src" ".harness/scripts/${f}"
+      fi
+      log_success "  updated script: ${f}"
+    fi
+  done
+
+  # Upgrade .claude/settings.local.json
+  local settings_src=""
+  if [ "$local_mode" = true ]; then
+    settings_src="${harness_dir}/../.harness/templates/.claude/settings.local.json"
+  else
+    if fetch_template_to ".claude/settings.local.json" "${upgrade_src}/settings.local.json" 2>/dev/null; then
+      settings_src="${upgrade_src}/settings.local.json"
+    fi
+  fi
+  if [ -n "$settings_src" ] && [ -f "$settings_src" ]; then
+    mkdir -p .claude
+    if [ "$dry_run" = false ]; then
+      cp "$settings_src" ".claude/settings.local.json"
+    fi
+    log_success "  updated .claude/settings.local.json"
+  fi
+
+  # Upgrade git pre-commit hook (if harness-managed)
+  if [ -d ".git" ] && [ -f ".git/hooks/pre-commit" ] && grep -q "managed by harness" ".git/hooks/pre-commit" 2>/dev/null; then
+    local hook_src=".harness/scripts/git-pre-commit.sh"
+    if [ -f "$hook_src" ]; then
+      if [ "$dry_run" = false ]; then
+        cp "$hook_src" ".git/hooks/pre-commit"
+        chmod +x ".git/hooks/pre-commit"
+      fi
+      log_success "  updated git pre-commit hook"
+    fi
+  fi
 
   echo ""
   log_info "Upgrade report:"
