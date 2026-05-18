@@ -318,6 +318,31 @@ cmd_init() {
 CONF
   log_success "Created .harness/config.json"
 
+  # Append harness entries to .gitignore (idempotent)
+  local gitignore_entries=".harness/
+.claude/settings.local.json"
+  local gitignore_needs_update=false
+  while IFS= read -r entry; do
+    [ -z "$entry" ] && continue
+    if [ -f ".gitignore" ] && grep -qF "$entry" .gitignore 2>/dev/null; then
+      true  # already present
+    else
+      gitignore_needs_update=true
+      break
+    fi
+  done <<< "$gitignore_entries"
+  if [ "$gitignore_needs_update" = true ]; then
+    echo "" >> .gitignore
+    echo "# harness" >> .gitignore
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      if ! grep -qF "$entry" .gitignore 2>/dev/null; then
+        echo "$entry" >> .gitignore
+      fi
+    done <<< "$gitignore_entries"
+    log_success "Updated .gitignore with harness entries"
+  fi
+
   # Warn if not a git repo
   if [ ! -d ".git" ]; then
     echo ""
