@@ -1,5 +1,6 @@
 {
   "project": "",
+  "_status": "awaiting_requirements",
   "last_updated": "",
   "autonomous_config": {
     "enabled": true,
@@ -22,6 +23,5 @@
     "blocked": "因为已记录的阻塞问题，当前无法继续推进。",
     "passing": "要求的验证已经通过，并且证据已经记录。"
   },
-  "features": [],
-  "_hint": "如果 features 为空，先和用户讨论需求，把大目标拆解成可验证的小功能，然后写入 features 数组。每个功能需要 id、priority、title、status、verification 四个字段。拆解完后删除此字段。"
+  "features": []
 }

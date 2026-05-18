@@ -71,6 +71,8 @@
 
 然后只选择一个未完成功能，围绕它工作，直到它被验证通过，或者被明确记录为 blocked。
 
+如果 `feature_list.json` 的 `features` 为空（`_status` 为 `awaiting_requirements`），先和用户讨论需求，把大目标拆解成可验证的小功能，写入 `features` 数组，将 `_status` 改为 `"active"`，然后继续正常流程。
+
 **约束：同一时间只能有一个 active feature。**
 
 ## 自治迭代循环

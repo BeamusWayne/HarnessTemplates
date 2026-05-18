@@ -215,7 +215,7 @@ cmd_init() {
   done
 
   # Copy validation scripts
-  for f in check-harness.sh ci.sh hook-guard.sh; do
+  for f in check-harness.sh ci.sh hook-guard.sh session-start.sh; do
     if [ "$use_local" = true ]; then
       local scripts_src="${harness_dir}/../.harness/scripts"
       [ -f "${scripts_src}/${f}" ] && cp "${scripts_src}/${f}" ".harness/scripts/${f}" && log_success "Copied script ${f}"
@@ -223,6 +223,9 @@ cmd_init() {
       fetch_template_to ".harness/scripts/${f}" ".harness/scripts/${f}" 2>/dev/null && log_success "Copied script ${f}" || true
     fi
   done
+
+  # Ensure all scripts are executable
+  chmod +x .harness/scripts/*.sh 2>/dev/null || true
 
   # Deploy .claude/settings.local.json (hooks)
   mkdir -p .claude
@@ -280,6 +283,14 @@ cmd_init() {
     install_cmd="cargo build"; verify_cmd="cargo test"; start_cmd="cargo run"
   elif [ -f "go.mod" ]; then
     install_cmd="go mod download"; verify_cmd="go test ./..."; start_cmd="go run ."
+  elif [ -f "bun.lock" ] || [ -f "bunfig.toml" ]; then
+    install_cmd="bun install"; verify_cmd="bun test"; start_cmd="bun run"
+  elif [ -f "package.json" ]; then
+    install_cmd="npm install"; verify_cmd="npm test"; start_cmd="npm start"
+  fi
+
+  if [ -z "$install_cmd" ]; then
+    log_warn "未检测到项目类型，可在 .harness/config.json 中手动配置 project_commands"
   fi
 
   config_write ".harness/config.json" <<CONF
