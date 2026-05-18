@@ -23,7 +23,7 @@
 - 除非为了消除当前 blocker 的窄范围修复，否则不要扩大到其他功能。
 - 实现过程中不要悄悄改弱验证规则。
 - 优先依赖仓库里的持久化文件，而不是聊天记录。
-- 如果 `feature_list.json` 的 `features` 为空（`_status` 为 `awaiting_requirements`），先和用户讨论需求，把大目标拆解成可验证的小功能，写入 `features` 数组，将 `_status` 改为 `"active"`。
+- 如果 `feature_list.json` 的 `features` 为空（`_status` 为 `awaiting_requirements`），先和用户讨论需求，把大目标拆解成可验证的小功能，写入 `features` 数组。写入后必须等用户确认满意，才能将 `_status` 改为 `"active"`。
 
 ### 需求拆解规则
 

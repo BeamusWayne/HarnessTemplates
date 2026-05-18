@@ -99,6 +99,7 @@ harness — AI coding agent 脚手架管理工具
   doctor            诊断问题
   changelog         显示版本变更日志
   reset-status      重置功能清单为待规划状态
+  complete-plan     将执行计划移至已完成
   version           显示版本
   help              显示帮助
 
@@ -126,6 +127,13 @@ cmd_init() {
     log_error "Project already initialized (.harness/config.json exists)."
     echo "  Run 'harness upgrade' to update templates." >&2
     exit 1
+  fi
+
+  # Ensure git repo exists
+  if [ ! -d ".git" ]; then
+    log_info "Initializing git repository..."
+    git init -q
+    log_success "Created git repository"
   fi
 
   # Determine template source directory
@@ -341,12 +349,6 @@ CONF
       fi
     done <<< "$gitignore_entries"
     log_success "Updated .gitignore with harness entries"
-  fi
-
-  # Warn if not a git repo
-  if [ ! -d ".git" ]; then
-    echo ""
-    log_warn "当前目录不是 git 仓库。建议运行 git init 追踪变更。"
   fi
 
   echo ""
@@ -1293,6 +1295,41 @@ RESET
   log_info "告诉 AI 你想做什么，它会帮你重新拆解功能。"
 }
 
+# ── Complete-plan command
+cmd_complete_plan() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  local name="${1:-}"
+  if [ -z "$name" ]; then
+    log_error "Usage: harness complete-plan <name>"
+    exit 1
+  fi
+
+  # Find matching plan file
+  local plan_file=""
+  if [ -f ".harness/plans/active/${name}" ]; then
+    plan_file=".harness/plans/active/${name}"
+  elif [ -f ".harness/plans/active/${name}.md" ]; then
+    plan_file=".harness/plans/active/${name}.md"
+  else
+    # Try partial match
+    plan_file="$(find .harness/plans/active -name "*${name}*" -type f 2>/dev/null | head -1 || true)"
+    if [ -z "$plan_file" ]; then
+      log_error "Plan not found: ${name}"
+      echo "  Active plans:" >&2
+      ls .harness/plans/active/ 2>/dev/null | sed 's/^/    /' >&2 || echo "    (none)" >&2
+      exit 1
+    fi
+  fi
+
+  mkdir -p .harness/plans/completed
+  mv "$plan_file" ".harness/plans/completed/$(basename "$plan_file")"
+  log_success "Completed plan: $(basename "$plan_file")"
+}
+
 # ── Main dispatch
 case "${1:-help}" in
   version|--version|-v) cmd_version ;;
@@ -1311,5 +1348,6 @@ case "${1:-help}" in
   doctor)               shift; cmd_doctor "$@" ;;
   changelog)            shift; cmd_changelog "$@" ;;
   reset-status)         shift; cmd_reset_status "$@" ;;
+  complete-plan)        shift; cmd_complete_plan "$@" ;;
   *)                    echo "harness: unknown command '$1'" >&2; cmd_help >&2; exit 1 ;;
 esac

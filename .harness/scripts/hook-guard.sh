@@ -16,12 +16,25 @@ case "${1:-}" in
       if [ -z "$plan_file" ]; then
         # Check if any plan exists in plans/active
         if [ -d ".harness/plans/active" ] && [ -n "$(find .harness/plans/active -name "*.md" -not -empty 2>/dev/null | head -1)" ]; then
-          true  # Plan exists
+          # Check if any plan is filled (not just template placeholders)
+          local any_filled=false
+          for pf in .harness/plans/active/*.md; do
+            [ -f "$pf" ] || continue
+            if ! grep -qE '<任务标题>|<第一步>|<待' "$pf" 2>/dev/null; then
+              any_filled=true
+              break
+            fi
+          done
+          if [ "$any_filled" = false ]; then
+            echo "[harness] 所有计划文件仍是空模板。请先填充具体内容后再编码。"
+          fi
         else
           echo "[harness] 当前功能没有执行计划。请先用 harness new-plan 创建计划后再编码。"
         fi
       elif [ ! -f "$plan_file" ]; then
         echo "[harness] 计划文件 ${plan_file} 不存在。请先创建计划。"
+      elif grep -qE '<任务标题>|<第一步>|<第一步>|<待' "$plan_file" 2>/dev/null; then
+        echo "[harness] 计划文件仍是空模板。请先填充具体内容后再编码。"
       fi
     fi
     ;;
