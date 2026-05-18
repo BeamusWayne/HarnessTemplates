@@ -26,8 +26,13 @@
 
 ### Rule 6 — Token 预算是硬约束
 - 单任务：4,000 tokens。单会话：30,000 tokens。
-- 接近预算时，总结后重新开始。超了要显式报告，不要静默超限。
+- 每完成一个功能的子任务后，主动报告剩余预算估算。
+- 当剩余预算 < 30% 时，必须：
+  1. 暂停当前功能
+  2. 更新 claude-progress.md 记录进度和重启路径
+  3. 告诉用户："剩余预算约 X tokens，建议开启新会话继续"
 - 自治模式下，当剩余预算 < 20% 时，必须完成当前功能的收尾流程后停止，不得开启新功能。
+- 超了要显式报告，不要静默超限。
 
 ### Rule 7 — 冲突要暴露，不要取平均
 - 两个模式矛盾时，选一个（更近的 / 更久经考验的），解释原因。
@@ -75,6 +80,25 @@
 
 **约束：同一时间只能有一个 active feature。**
 
+### 需求拆解规则
+
+拆解功能时必须遵守：
+1. **第一个功能必须是"项目基础设施"**（priority 1），包含：项目脚手架搭建、测试框架配置、lint/format 配置。只有这个功能 passing 后才能开始后续业务功能。
+2. 每个功能必须包含：`description`（功能描述）、`depends_on`（依赖的其他功能 id）、`verification`（验证标准）。
+3. 功能粒度：一个功能应在 1-2 小时内可完成。太大则拆分，太小则合并。
+
+### 编码前必须规划
+
+对每个功能，编码前必须：
+1. 用 `harness new-plan <feature-id>` 创建执行计划
+2. 计划内容：需要创建/修改的文件、每个文件的改动描述、验证步骤、任务间依赖
+3. 在 feature_list.json 的 `plan_file` 字段记录计划文件路径
+4. **不允许在没有计划的情况下直接开始编码。**
+
+### 功能完成前必须审查
+
+功能标记 passing 前，必须按 `.harness/reference/review-checklist.md` 进行结构化自查。审查结果写入 `evidence` 字段，包含逐项的具体发现（不是简单的"已通过"）。
+
 ## 自治迭代循环
 
 当人类发出"开始工作"或"继续"指令后，进入自治模式。按以下循环工作，直到所有功能 passing 或触发升级条件。
@@ -85,24 +109,26 @@ REPEAT:
   1. 读取 feature_list.json
   2. 找到优先级最高的 not_started 或 in_progress 功能
   3. 如果没有 → 退出循环，报告"所有功能已完成"
-  4. 对该功能执行中层循环
-  5. 如果功能状态变为 passing → 更新 evidence，提交，继续下一个
-  6. 如果功能状态变为 blocked → 记录 blocker，跳到下一个 not_started 功能
-  7. 如果连续 2 个功能都 blocked → 停止，报告升级
+  4. 检查该功能是否有 plan 文件（plan_file 字段或 .harness/plans/active/ 中对应文件）
+  5. 如果没有 plan → 先创建计划，再继续
+  6. 对该功能执行中层循环
+  7. 如果功能状态变为 passing → 更新 evidence，提交，继续下一个
+  8. 如果功能状态变为 blocked → 记录 blocker 和 blocked_reason，跳到下一个 not_started 功能
+  9. 如果连续 2 个功能都 blocked → 停止，报告升级
 
 ### 中层：验证-修复循环（每个功能最多 N 轮）
 
 REPEAT (max: feature.iteration_budget 次，默认 5):
   1. 实现或修复代码
   2. 运行 auto_check.command（如果有）或手动验证步骤
-  3. 如果通过 → 标记 passing，退出中层循环
+  3. 如果通过 → 执行审查（review-checklist.md），审查通过后标记 passing，退出中层循环
   4. 如果失败 → 分类错误:
      - 构建错误（编译/类型）→ 自动修复，重试
      - 测试断言失败 → 分析 diff，修复，重试
      - 环境错误（端口占用、依赖缺失）→ 尝试一次修复，如果仍失败则升级
      - 未知错误 → 记录，升级
   5. 每次失败后，递增该功能的 iteration_count
-  6. 如果 iteration_count >= iteration_budget → 标记 blocked，记录原因，退出
+  6. 如果 iteration_count >= iteration_budget → 标记 blocked，记录 blocked_reason，退出
 
 ### 内层：构建-测试循环
 
@@ -119,7 +145,7 @@ REPEAT (max: 3 次):
 - 连续 2 个功能变为 blocked
 - 当前功能的 iteration_count 达到 iteration_budget
 - 运行 ./init.sh health 失败（基础环境坏了）
-- Token 预算剩余不足 20%
+- Token 预算剩余不足 30%（提醒用户）；不足 20%（强制停止）
 - 检测到自己正在重复同一个修改（用 git diff 检测连续两次 diff 相似度 > 80%）
 
 ### 自治模式下的提交策略
@@ -146,8 +172,11 @@ REPEAT (max: 3 次):
 | `.harness/reference/initializer-agent-playbook.md` | 首次初始化项目时 |
 | `.harness/reference/coding-agent-startup-flow.md` | 不确定开工流程时 |
 | `.harness/reference/prompt-calibration.md` | 调整根指令时 |
+| `.harness/reference/planning-methodology.md` | 拆解功能或创建执行计划时 |
+| `.harness/reference/review-checklist.md` | 功能完成前的代码审查 |
+| `.harness/reference/testing-strategy.md` | 编写测试或设计验证方案时 |
 | `.harness/templates/autonomous-loop.md` | 进入自治模式时 |
-| `.harness/templates/self-eval-trigger.md` | 自治模式需要自我评审时 |
+| `.harness/templates/self-eeval-trigger.md` | 自治模式需要自我评审时 |
 | `.harness/plans/active/` | 接手复杂任务时 |
 
 ## 结构验证

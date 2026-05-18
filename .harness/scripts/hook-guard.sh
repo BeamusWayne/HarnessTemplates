@@ -10,6 +10,20 @@ case "${1:-}" in
     if ! grep -q '"in_progress"' feature_list.json 2>/dev/null; then
       echo "[harness] 没有进行中的功能。请先用 feature_list.json 选一个任务。"
     fi
+    # Check for plan file
+    if grep -q '"in_progress"' feature_list.json 2>/dev/null; then
+      plan_file="$(grep -A10 '"in_progress"' feature_list.json 2>/dev/null | grep -o '"plan_file"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\(.*\)"/\1/' || true)"
+      if [ -z "$plan_file" ]; then
+        # Check if any plan exists in plans/active
+        if [ -d ".harness/plans/active" ] && [ -n "$(find .harness/plans/active -name "*.md" -not -empty 2>/dev/null | head -1)" ]; then
+          true  # Plan exists
+        else
+          echo "[harness] 当前功能没有执行计划。请先用 harness new-plan 创建计划后再编码。"
+        fi
+      elif [ ! -f "$plan_file" ]; then
+        echo "[harness] 计划文件 ${plan_file} 不存在。请先创建计划。"
+      fi
+    fi
     ;;
 
   pre-stop)

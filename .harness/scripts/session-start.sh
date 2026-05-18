@@ -20,8 +20,23 @@ count_status() {
   grep -c "\"${status}\"" feature_list.json 2>/dev/null || echo 0
 }
 
+# Extract blocked reason for a feature
+get_blocked_reason() {
+  grep -A20 '"blocked"' feature_list.json 2>/dev/null | \
+    grep -o '"blocked_reason"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | \
+    sed 's/.*:.*"\(.*\)"/\1/' || echo ""
+}
+
+# Find feature id by status
+find_id_by_status() {
+  local status="$1"
+  grep -B5 "\"${status}\"" feature_list.json 2>/dev/null | \
+    grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | \
+    sed 's/.*:.*"\(.*\)"/\1/' || echo ""
+}
+
 project_name="$(basename "$(pwd)")"
-_status="$(get_status)"
+_status="$(get_status")"
 
 # Count totals
 passing="$(count_status "passing")"
@@ -34,13 +49,13 @@ if [ "$total" -eq 0 ] || [ "$_status" = "awaiting_requirements" ]; then
   echo "[harness] 项目: ${project_name} | 状态: 待规划"
   echo "[harness] 功能清单为空。告诉 AI 你想做什么项目，AI 会帮你拆解成功能列表。"
 else
-  # Find first non-passing feature id
+  # Find active feature
   active_id=""
   if [ "$in_progress" -gt 0 ]; then
-    active_id="$(grep -B5 '"in_progress"' feature_list.json 2>/dev/null | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\(.*\)"/\1/' || echo "")"
+    active_id="$(find_id_by_status "in_progress")"
   fi
   if [ -z "$active_id" ] && [ "$not_started" -gt 0 ]; then
-    active_id="$(grep -B5 '"not_started"' feature_list.json 2>/dev/null | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*:.*"\(.*\)"/\1/' || echo "")"
+    active_id="$(find_id_by_status "not_started")"
   fi
 
   status_line="[harness] 项目: ${project_name} | 进度: ${passing}/${total} passing"
@@ -48,5 +63,26 @@ else
     status_line="${status_line} | 当前: ${active_id}"
   fi
   echo "$status_line"
-  echo "[harness] 建议运行 ./init.sh 同步环境，然后继续当前功能。"
+
+  # Blocked guidance
+  if [ "$blocked" -gt 0 ]; then
+    blocked_id="$(find_id_by_status "blocked")"
+    blocked_reason="$(get_blocked_reason)"
+    echo "[harness] blocked: ${blocked_id} — ${blocked_reason:-原因未记录}"
+    echo "[harness] 恢复建议：告诉 AI \"继续 ${blocked_id}\" 或 \"重新规划 ${blocked_id}\""
+  else
+    echo "[harness] 建议运行 ./init.sh 同步环境，然后继续当前功能。"
+  fi
+
+  # Plan file check
+  if [ "$in_progress" -gt 0 ] || [ "$not_started" -gt 0 ]; then
+    plan_count=0
+    if [ -d ".harness/plans/active" ]; then
+      plan_count="$(find .harness/plans/active -name "*.md" 2>/dev/null | wc -l | tr -d ' ')"
+    fi
+    pending=$((in_progress + not_started))
+    if [ "$plan_count" -eq 0 ] && [ "$pending" -gt 0 ]; then
+      echo "[harness] 有 ${pending} 个未完成功能但没有执行计划。编码前必须先用 harness new-plan 创建计划。"
+    fi
+  fi
 fi

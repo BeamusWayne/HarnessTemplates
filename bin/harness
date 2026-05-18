@@ -98,6 +98,7 @@ harness — AI coding agent 脚手架管理工具
   report            生成工作总结
   doctor            诊断问题
   changelog         显示版本变更日志
+  reset-status      重置功能清单为待规划状态
   version           显示版本
   help              显示帮助
 
@@ -203,7 +204,7 @@ cmd_init() {
   done
 
   # Copy reference docs
-  local ref_files=(method-map.md initializer-agent-playbook.md coding-agent-startup-flow.md prompt-calibration.md index.md)
+  local ref_files=(method-map.md initializer-agent-playbook.md coding-agent-startup-flow.md prompt-calibration.md index.md planning-methodology.md review-checklist.md testing-strategy.md)
   mkdir -p .harness/reference
   for f in "${ref_files[@]}"; do
     if [ "$use_local" = true ]; then
@@ -317,6 +318,12 @@ cmd_init() {
 CONF
   log_success "Created .harness/config.json"
 
+  # Warn if not a git repo
+  if [ ! -d ".git" ]; then
+    echo ""
+    log_warn "当前目录不是 git 仓库。建议运行 git init 追踪变更。"
+  fi
+
   echo ""
   log_info "Harness initialized successfully!"
   echo ""
@@ -361,6 +368,29 @@ cmd_status() {
     echo "    in_progress:  ${in_progress}"
     echo "    blocked:      ${blocked}"
     echo "    not_started:  ${not_started}"
+
+    # List features with titles (if any)
+    if [ "$total" -gt 0 ]; then
+      echo ""
+      echo "  Features:"
+      awk '
+        /"id"/ { id=$0; gsub(/.*:.*"/, "", id); gsub(/".*/, "", id) }
+        /"title"/ { title=$0; gsub(/.*:.*"/, "", title); gsub(/".*/, "", title) }
+        /"status"/ { status=$0; gsub(/.*:.*"/, "", status); gsub(/".*/, "", status); if (id && title) printf "    %-12s %s: %s\n", status, id, title; id=""; title="" }
+      ' feature_list.json 2>/dev/null | sort || true
+    fi
+
+    # Plan file status
+    echo ""
+    local plan_count=0
+    if [ -d ".harness/plans/active" ]; then
+      plan_count="$(find .harness/plans/active -name "*.md" 2>/dev/null | wc -l | tr -d ' ')"
+    fi
+    local pending=$((in_progress + not_started))
+    log_info "Plans: ${plan_count} active, ${pending} pending features"
+    if [ "$plan_count" -lt "$pending" ] && [ "$pending" -gt 0 ]; then
+      log_warn "有 ${pending} 个未完成功能但只有 ${plan_count} 个执行计划"
+    fi
   else
     log_warn "feature_list.json not found"
   fi
@@ -797,7 +827,7 @@ cmd_upgrade() {
 
   # Upgrade reference docs
   log_info "Checking reference docs..."
-  local ref_files=(method-map.md initializer-agent-playbook.md coding-agent-startup-flow.md prompt-calibration.md index.md)
+  local ref_files=(method-map.md initializer-agent-playbook.md coding-agent-startup-flow.md prompt-calibration.md index.md planning-methodology.md review-checklist.md testing-strategy.md)
   mkdir -p .harness/reference
   for f in "${ref_files[@]}"; do
     if [ "$local_mode" = true ]; then
@@ -1173,6 +1203,71 @@ cmd_changelog() {
   log_info "显示最近 20 条提交。运行 'harness upgrade' 更新。"
 }
 
+# ── Reset-status command
+cmd_reset_status() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  if [ ! -f "feature_list.json" ]; then
+    log_error "feature_list.json not found"
+    exit 1
+  fi
+
+  local timestamp
+  timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  # Reset to awaiting_requirements with empty features
+  cat > "feature_list.json" <<RESET
+{
+  "project": "$(config_read_field ".harness/config.json" "project_name")",
+  "_status": "awaiting_requirements",
+  "last_updated": "${timestamp}",
+  "autonomous_config": {
+    "enabled": true,
+    "max_iterations_per_feature": 5,
+    "max_consecutive_blocked": 2,
+    "stop_on_budget_remaining_percent": 20,
+    "loop_detection_threshold": 0.8,
+    "auto_commit_on_passing": true,
+    "auto_commit_wip": true,
+    "escalation_notify": "terminal"
+  },
+  "rules": {
+    "single_active_feature": true,
+    "passing_requires_evidence": true,
+    "do_not_skip_verification": true,
+    "plan_before_code": true,
+    "review_before_passing": true,
+    "infra_first": true
+  },
+  "status_legend": {
+    "not_started": "功能还没开始做。",
+    "in_progress": "这个功能是当前唯一正在进行的任务。",
+    "blocked": "因为已记录的阻塞问题，当前无法继续推进。",
+    "passing": "要求的验证已经通过，并且证据已经记录。"
+  },
+  "feature_template": {
+    "id": "feat-NNN",
+    "title": "功能标题",
+    "description": "功能的详细描述，包含预期行为和边界",
+    "status": "not_started",
+    "priority": 1,
+    "depends_on": [],
+    "verification": "验证标准：什么条件下算通过",
+    "plan_file": "",
+    "evidence": "",
+    "blocked_reason": "",
+    "iteration_count": 0
+  },
+  "features": []
+}
+RESET
+  log_success "feature_list.json 已重置为 awaiting_requirements"
+  log_info "告诉 AI 你想做什么，它会帮你重新拆解功能。"
+}
+
 # ── Main dispatch
 case "${1:-help}" in
   version|--version|-v) cmd_version ;;
@@ -1190,5 +1285,6 @@ case "${1:-help}" in
   report)               shift; cmd_report "$@" ;;
   doctor)               shift; cmd_doctor "$@" ;;
   changelog)            shift; cmd_changelog "$@" ;;
+  reset-status)         shift; cmd_reset_status "$@" ;;
   *)                    echo "harness: unknown command '$1'" >&2; cmd_help >&2; exit 1 ;;
 esac

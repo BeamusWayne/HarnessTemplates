@@ -19,11 +19,28 @@
 ## 工作规则
 
 - 一次只做一个功能。
-- 不要因为”代码已经写了”就把功能标记为完成。
+- 不要因为"代码已经写了"就把功能标记为完成。
 - 除非为了消除当前 blocker 的窄范围修复，否则不要扩大到其他功能。
 - 实现过程中不要悄悄改弱验证规则。
 - 优先依赖仓库里的持久化文件，而不是聊天记录。
-- 如果 `feature_list.json` 的 `features` 为空（`_status` 为 `awaiting_requirements`），先和用户讨论需求，把大目标拆解成可验证的小功能，写入 `features` 数组，将 `_status` 改为 `”active”`。
+- 如果 `feature_list.json` 的 `features` 为空（`_status` 为 `awaiting_requirements`），先和用户讨论需求，把大目标拆解成可验证的小功能，写入 `features` 数组，将 `_status` 改为 `"active"`。
+
+### 需求拆解规则
+
+- **第一个功能必须是"项目基础设施"**（priority 1），包含：项目脚手架、测试框架、lint/format。只有 passing 后才能开始业务功能。
+- 每个功能必须包含：`description`、`depends_on`、`verification`。
+- 功能粒度：1-2 小时可完成。
+
+### 编码前必须规划
+
+- 编码前必须用 `harness new-plan <feature-id>` 创建执行计划。
+- 记录计划文件路径到 `plan_file` 字段。
+- 不允许在没有计划的情况下直接编码。
+
+### 完成前必须审查
+
+- 功能标记 passing 前按 `.harness/reference/review-checklist.md` 结构化自查。
+- 审查结果写入 `evidence`，包含逐项具体发现。
 
 ## 必需文件
 
@@ -37,14 +54,21 @@
 
 - 目标行为已经实现
 - 要求的验证真的跑过
+- 代码审查已完成，结果记录在 evidence
 - 证据记录在 `feature_list.json` 或 `claude-progress.md`
 - 仓库仍然能按标准启动路径重新开始工作
+
+## Token 预算管理
+
+- 剩余预算 < 30% 时：暂停，更新 progress.md，提示用户开启新会话。
+- 剩余预算 < 20% 时：强制停止，完成收尾。
+- 每个子任务完成后报告剩余预算估算。
 
 ## 收尾
 
 结束会话前：
 
-1. 更新 `claude-progress.md`
+1. 更新 `claude-progress.md`，包含清晰的重启路径
 2. 更新 `feature_list.json`
 3. 记录仍未解决的风险或 blocker
 4. 在工作处于安全状态后，用清晰的提交信息提交
@@ -61,19 +85,20 @@
 ### 自治循环
 
 1. 按优先级从 feature_list.json 选取下一个未完成功能
-2. 实现该功能
-3. 运行验证
-4. 如果验证通过 → 标记 passing，提交，进入下一个功能
-5. 如果验证失败 → 修复，重试（同一功能最多 5 次）
-6. 如果 5 次仍失败 → 标记 blocked，记录原因，跳到下一个功能
-7. 如果连续 2 个功能 blocked → 停止自治，报告状态
+2. 检查是否有 plan 文件，没有则先创建
+3. 实现该功能
+4. 运行验证
+5. 如果验证通过 → 执行代码审查 → 标记 passing，提交，进入下一个功能
+6. 如果验证失败 → 修复，重试（同一功能最多 5 次）
+7. 如果 5 次仍失败 → 标记 blocked，记录 blocked_reason，跳到下一个功能
+8. 如果连续 2 个功能 blocked → 停止自治，报告状态
 
 ### 停止条件
 
 - 所有功能 passing
 - 连续 2 个功能 blocked
 - 环境基础验证失败
-- Token 预算不足
+- Token 预算不足 30%（提醒）；不足 20%（强制停止）
 - 检测到循环重复（连续 2 次提交的 diff 相似度 > 80%）
 
 ### 停止后的报告
@@ -102,6 +127,9 @@
 | `.harness/reference/initializer-agent-playbook.md` | 首次初始化项目时 |
 | `.harness/reference/coding-agent-startup-flow.md` | 不确定开工流程时 |
 | `.harness/reference/prompt-calibration.md` | 调整根指令时 |
+| `.harness/reference/planning-methodology.md` | 拆解功能或创建执行计划时 |
+| `.harness/reference/review-checklist.md` | 功能完成前的代码审查 |
+| `.harness/reference/testing-strategy.md` | 编写测试或设计验证方案时 |
 | `.harness/templates/autonomous-loop.md` | 进入自治模式时 |
 | `.harness/templates/self-eval-trigger.md` | 自治模式需要自我评审时 |
 | `.harness/plans/active/` | 接手复杂任务时 |

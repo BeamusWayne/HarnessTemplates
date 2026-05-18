@@ -15,13 +15,29 @@
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
-    "do_not_skip_verification": true
+    "do_not_skip_verification": true,
+    "plan_before_code": true,
+    "review_before_passing": true,
+    "infra_first": true
   },
   "status_legend": {
     "not_started": "功能还没开始做。",
     "in_progress": "这个功能是当前唯一正在进行的任务。",
     "blocked": "因为已记录的阻塞问题，当前无法继续推进。",
     "passing": "要求的验证已经通过，并且证据已经记录。"
+  },
+  "feature_template": {
+    "id": "feat-NNN",
+    "title": "功能标题",
+    "description": "功能的详细描述，包含预期行为和边界",
+    "status": "not_started",
+    "priority": 1,
+    "depends_on": [],
+    "verification": "验证标准：什么条件下算通过",
+    "plan_file": "",
+    "evidence": "",
+    "blocked_reason": "",
+    "iteration_count": 0
   },
   "features": []
 }
