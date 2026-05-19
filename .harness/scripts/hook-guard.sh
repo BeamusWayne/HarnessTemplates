@@ -48,6 +48,13 @@ case "${1:-}" in
     if [ "$progress_mtime" -le "$session_start" ] 2>/dev/null; then
       echo "[harness] claude-progress.md 未更新。请在结束前记录进度。"
     fi
+    # Append session_end event
+    if [ -d ".harness/world" ] && [ -f "feature_list.json" ]; then
+      passing="$(grep -c '"passing"' feature_list.json 2>/dev/null || echo 0)"
+      remaining="$(grep -cE '"(not_started|in_progress|blocked)"' feature_list.json 2>/dev/null || echo 0)"
+      echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"session_end\",\"features_completed\":${passing},\"features_remaining\":${remaining}}" \
+        >> .harness/world/events.jsonl
+    fi
     ;;
 
   *)
