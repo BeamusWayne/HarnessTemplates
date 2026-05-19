@@ -29,7 +29,9 @@ get_status() {
 # Count features by status
 count_status() {
   local status="$1"
-  grep -c "\"${status}\"" feature_list.json 2>/dev/null || echo 0
+  local _section
+  _section="$(sed -n '/"features"[[:space:]]*:/,$ p' feature_list.json 2>/dev/null || true)"
+  echo "$_section" | grep -c "\"${status}\"" 2>/dev/null || true
 }
 
 # Extract blocked reason for a feature
@@ -51,10 +53,10 @@ project_name="$(basename "$(pwd)")"
 _status="$(get_status)"
 
 # Count totals
-passing="$(count_status "passing")"
-in_progress="$(count_status "in_progress")"
-blocked="$(count_status "blocked")"
-not_started="$(count_status "not_started")"
+passing="$(count_status "passing")"; passing="${passing:-0}"
+in_progress="$(count_status "in_progress")"; in_progress="${in_progress:-0}"
+blocked="$(count_status "blocked")"; blocked="${blocked:-0}"
+not_started="$(count_status "not_started")"; not_started="${not_started:-0}"
 total=$((passing + in_progress + blocked + not_started))
 
 if [ "$total" -eq 0 ] || [ "$_status" = "awaiting_requirements" ]; then

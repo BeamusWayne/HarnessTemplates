@@ -50,8 +50,11 @@ case "${1:-}" in
     fi
     # Append session_end event
     if [ -d ".harness/world" ] && [ -f "feature_list.json" ]; then
-      passing="$(grep -c '"passing"' feature_list.json 2>/dev/null || echo 0)"
-      remaining="$(grep -cE '"(not_started|in_progress|blocked)"' feature_list.json 2>/dev/null || echo 0)"
+      _features_section="$(sed -n '/"features"[[:space:]]*:/,$ p' feature_list.json 2>/dev/null || true)"
+      passing="$(echo "$_features_section" | grep -c '"passing"' 2>/dev/null || true)"
+      passing="${passing:-0}"
+      remaining="$(echo "$_features_section" | grep -cE '"(not_started|in_progress|blocked)"' 2>/dev/null || true)"
+      remaining="${remaining:-0}"
       echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"session_end\",\"features_completed\":${passing},\"features_remaining\":${remaining}}" \
         >> .harness/world/events.jsonl
     fi

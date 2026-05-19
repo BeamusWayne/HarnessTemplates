@@ -419,10 +419,16 @@ cmd_status() {
   # Count features by status
   if [ -f "feature_list.json" ]; then
     local passing=0 in_progress=0 blocked=0 not_started=0
-    passing="$(grep -c '"passing"' feature_list.json 2>/dev/null || echo 0)"
-    in_progress="$(grep -c '"in_progress"' feature_list.json 2>/dev/null || echo 0)"
-    blocked="$(grep -c '"blocked"' feature_list.json 2>/dev/null || echo 0)"
-    not_started="$(grep -c '"not_started"' feature_list.json 2>/dev/null || echo 0)"
+    local features_section
+    features_section="$(sed -n '/"features"[[:space:]]*:/,$ p' feature_list.json 2>/dev/null || true)"
+    passing="$(echo "$features_section" | grep -c '"passing"' 2>/dev/null || true)"
+    passing="${passing:-0}"
+    in_progress="$(echo "$features_section" | grep -c '"in_progress"' 2>/dev/null || true)"
+    in_progress="${in_progress:-0}"
+    blocked="$(echo "$features_section" | grep -c '"blocked"' 2>/dev/null || true)"
+    blocked="${blocked:-0}"
+    not_started="$(echo "$features_section" | grep -c '"not_started"' 2>/dev/null || true)"
+    not_started="${not_started:-0}"
     local total=$((passing + in_progress + blocked + not_started))
 
     echo ""
@@ -436,20 +442,20 @@ cmd_status() {
     if [ "$total" -gt 0 ]; then
       echo ""
       echo "  Features:"
-      awk '
-        /"id"/ { id=$0; gsub(/.*:.*"/, "", id); gsub(/".*/, "", id) }
-        /"title"/ { title=$0; gsub(/.*:.*"/, "", title); gsub(/".*/, "", title) }
-        /"status"/ { status=$0; gsub(/.*:.*"/, "", status); gsub(/".*/, "", status); if (id && title) printf "    %-12s %s: %s\n", status, id, title; id=""; title="" }
-      ' feature_list.json 2>/dev/null | sort || true
+      echo "$features_section" | awk '
+        /"id"/ { id=$0; gsub(/.*: "/, "", id); gsub(/".*/, "", id) }
+        /"title"/ { title=$0; gsub(/.*: "/, "", title); gsub(/".*/, "", title) }
+        /"status"/ { status=$0; gsub(/.*: "/, "", status); gsub(/".*/, "", status); if (id && title) printf "    %-12s %s: %s\n", status, id, title; id=""; title="" }
+      ' 2>/dev/null | sort || true
 
       # Show blocked reasons if any
       if [ "$blocked" -gt 0 ]; then
         echo ""
         log_warn "Blocked features (需要你介入):"
-        awk '
-          /"id"/ { id=$0; gsub(/.*:.*"/, "", id); gsub(/".*/, "", id) }
-          /"blocked_reason"/ { reason=$0; gsub(/.*:.*"/, "", reason); gsub(/".*/, "", reason); if (id && reason) printf "    %s: %s\n", id, reason; id="" }
-        ' feature_list.json 2>/dev/null || true
+        echo "$features_section" | awk '
+          /"id"/ { id=$0; gsub(/.*: "/, "", id); gsub(/".*/, "", id) }
+          /"blocked_reason"/ { reason=$0; gsub(/.*: "/, "", reason); gsub(/".*/, "", reason); if (id && reason) printf "    %s: %s\n", id, reason; id="" }
+        ' 2>/dev/null || true
         echo "  解决后告诉 AI: \"继续 <功能ID>\" 或 \"先做下一个功能\""
       fi
     fi
