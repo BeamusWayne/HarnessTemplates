@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
 # .harness/scripts/session-start.sh — Claude Code SessionStart hook
-# Outputs project status for AI context. Read-only, never modifies files.
+# Outputs project status for AI context.
 set -euo pipefail
+
+# ── Append session_start event
+if [ -d ".harness/world" ]; then
+  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"event\":\"session_start\",\"agent\":\"claude-code\"}" \
+    >> .harness/world/events.jsonl
+fi
+
+# ── Refresh session marker
+touch .harness/.session-start 2>/dev/null || true
+
+# ── Auto chmod
+chmod +x init.sh .harness/scripts/*.sh 2>/dev/null || true
 
 # Fail silently — never block Claude from starting
 if [ ! -f "feature_list.json" ]; then
@@ -17,7 +29,9 @@ get_status() {
 # Count features by status
 count_status() {
   local status="$1"
-  grep -c "\"${status}\"" feature_list.json 2>/dev/null || echo 0
+  local _section
+  _section="$(sed -n '/"features"[[:space:]]*:/,$ p' feature_list.json 2>/dev/null || true)"
+  echo "$_section" | grep -c "\"${status}\"" 2>/dev/null || true
 }
 
 # Extract blocked reason for a feature
@@ -36,13 +50,13 @@ find_id_by_status() {
 }
 
 project_name="$(basename "$(pwd)")"
-_status="$(get_status")"
+_status="$(get_status)"
 
 # Count totals
-passing="$(count_status "passing")"
-in_progress="$(count_status "in_progress")"
-blocked="$(count_status "blocked")"
-not_started="$(count_status "not_started")"
+passing="$(count_status "passing")"; passing="${passing:-0}"
+in_progress="$(count_status "in_progress")"; in_progress="${in_progress:-0}"
+blocked="$(count_status "blocked")"; blocked="${blocked:-0}"
+not_started="$(count_status "not_started")"; not_started="${not_started:-0}"
 total=$((passing + in_progress + blocked + not_started))
 
 if [ "$total" -eq 0 ] || [ "$_status" = "awaiting_requirements" ]; then
@@ -84,5 +98,23 @@ else
     if [ "$plan_count" -eq 0 ] && [ "$pending" -gt 0 ]; then
       echo "[harness] 有 ${pending} 个未完成功能但没有执行计划。编码前必须先用 harness new-plan 创建计划。"
     fi
+  fi
+fi
+
+# ── Recent events summary (last 3 high-value events)
+if [ -f ".harness/world/events.jsonl" ]; then
+  recent="$(grep -E '"event":"(feature_status_change|verification_result|escalation)"' .harness/world/events.jsonl 2>/dev/null | tail -3 || true)"
+  if [ -n "$recent" ]; then
+    echo "[harness] 最近事件:"
+    echo "$recent" | while IFS= read -r line; do
+      ts="$(echo "$line" | grep -o '"ts":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/')"
+      evt="$(echo "$line" | grep -o '"event":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/')"
+      feat="$(echo "$line" | grep -o '"feature":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/' || true)"
+      result="$(echo "$line" | grep -o '"result":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/' || true)"
+      msg="  ${ts}  ${evt}"
+      [ -n "$feat" ] && msg="${msg}  ${feat}"
+      [ -n "$result" ] && msg="${msg} → ${result}"
+      echo "$msg"
+    done
   fi
 fi

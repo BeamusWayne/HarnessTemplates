@@ -1,6 +1,38 @@
 #!/usr/bin/env bash
 # bin/harness — AI coding agent 脚手架管理工具
 set -euo pipefail
+#
+# ── Function Index ──────────────────────────────────────────────
+# Config helpers:
+#   config_read_field, config_read_array, config_write
+# URL helpers:
+#   template_raw_url, fetch_template_to
+# Logging:
+#   log_info, log_success, log_warn, log_error
+# Commands (alphabetical):
+#   cmd_adopt           — accept upstream version of a file
+#   cmd_check           — run structural integrity check
+#   cmd_changelog       — show recent upstream commits
+#   cmd_complete_plan   — move plan from active/ to completed/
+#   cmd_customize       — mark file as user-customized
+#   cmd_diff            — compare local file vs upstream template
+#   cmd_doctor          — diagnose configuration issues
+#   cmd_help            — show usage information
+#   cmd_init            — initialize harness in a project
+#   cmd_new_history     — create a change history record
+#   cmd_new_plan        — create an execution plan
+#   cmd_reset_status    — reset feature_list.json to initial state
+#   cmd_status          — show project status and feature progress
+#   cmd_uncustomize     — remove customization mark from file
+#   cmd_upgrade         — pull upstream template updates
+#   cmd_version         — print version
+# Internal:
+#   _rewrite_customized_array — update customized_files in config.json
+# ────────────────────────────────────────────────────────────────
+# Event types (written to .harness/world/events.jsonl):
+#   session_start, session_end, feature_status_change,
+#   verification_result, procedure_fired, observation
+# ────────────────────────────────────────────────────────────────
 
 HARNESS_VERSION="2.1.0"
 HARNESS_REPO="BeamusWayne/HarnessTemplates"
@@ -95,11 +127,11 @@ harness — AI coding agent 脚手架管理工具
   uncustomize <file> 取消定制标记
   new-plan <name>   创建执行计划
   new-history <name> 创建变更记录
-  report            生成工作总结
   doctor            诊断问题
   changelog         显示版本变更日志
   reset-status      重置功能清单为待规划状态
   complete-plan     将执行计划移至已完成
+  query [pattern]   查询事件日志（--today, --since）
   version           显示版本
   help              显示帮助
 
@@ -148,7 +180,7 @@ cmd_init() {
     fi
   fi
 
-  local framework_files=(CLAUDE.md AGENTS.md init.sh evaluator-rubric.md autonomous-loop.md self-eval-trigger.md)
+  local framework_files=(CLAUDE.md init.sh evaluator-rubric.md autonomous-loop.md self-eval-trigger.md)
   local data_files=(feature_list.json claude-progress.md)
   local scaffold_files=(plan-template.md history-template.md)
 
@@ -160,6 +192,8 @@ cmd_init() {
   mkdir -p .harness/plans/active
   mkdir -p .harness/plans/completed
   mkdir -p .harness/histories
+  mkdir -p .harness/world
+  touch .harness/world/events.jsonl
 
   # Copy framework files to project root
   for f in "${framework_files[@]}"; do
@@ -212,7 +246,7 @@ cmd_init() {
   done
 
   # Copy reference docs
-  local ref_files=(method-map.md initializer-agent-playbook.md coding-agent-startup-flow.md prompt-calibration.md index.md planning-methodology.md review-checklist.md testing-strategy.md)
+  local ref_files=(method-map.md initializer-agent-playbook.md coding-agent-startup-flow.md prompt-calibration.md index.md planning-methodology.md review-checklist.md testing-strategy.md human-guide.md)
   mkdir -p .harness/reference
   for f in "${ref_files[@]}"; do
     if [ "$use_local" = true ]; then
@@ -314,7 +348,7 @@ cmd_init() {
     "start": "${start_cmd}"
   },
   "file_categories": {
-    "framework": ["CLAUDE.md", "AGENTS.md", "init.sh", "evaluator-rubric.md", "autonomous-loop.md", "self-eval-trigger.md"],
+    "framework": ["CLAUDE.md", "init.sh", "evaluator-rubric.md", "autonomous-loop.md", "self-eval-trigger.md"],
     "data": ["feature_list.json", "claude-progress.md"],
     "scaffold": ["plan-template.md", "history-template.md"]
   },
@@ -360,6 +394,8 @@ CONF
   echo "    3. AI 会帮你拆解功能并写入 feature_list.json"
   echo "    4. 然后说\"开始工作\"，AI 按功能列表自动迭代"
   echo ""
+  echo "  人类操作指南: docs/human-guide.md"
+  echo ""
   echo "  日常维护:"
   echo "    harness status    # 查看进度"
   echo "    harness upgrade   # 更新模板"
@@ -383,10 +419,16 @@ cmd_status() {
   # Count features by status
   if [ -f "feature_list.json" ]; then
     local passing=0 in_progress=0 blocked=0 not_started=0
-    passing="$(grep -c '"passing"' feature_list.json 2>/dev/null || echo 0)"
-    in_progress="$(grep -c '"in_progress"' feature_list.json 2>/dev/null || echo 0)"
-    blocked="$(grep -c '"blocked"' feature_list.json 2>/dev/null || echo 0)"
-    not_started="$(grep -c '"not_started"' feature_list.json 2>/dev/null || echo 0)"
+    local features_section
+    features_section="$(sed -n '/"features"[[:space:]]*:/,$ p' feature_list.json 2>/dev/null || true)"
+    passing="$(echo "$features_section" | grep -c '"passing"' 2>/dev/null || true)"
+    passing="${passing:-0}"
+    in_progress="$(echo "$features_section" | grep -c '"in_progress"' 2>/dev/null || true)"
+    in_progress="${in_progress:-0}"
+    blocked="$(echo "$features_section" | grep -c '"blocked"' 2>/dev/null || true)"
+    blocked="${blocked:-0}"
+    not_started="$(echo "$features_section" | grep -c '"not_started"' 2>/dev/null || true)"
+    not_started="${not_started:-0}"
     local total=$((passing + in_progress + blocked + not_started))
 
     echo ""
@@ -400,11 +442,22 @@ cmd_status() {
     if [ "$total" -gt 0 ]; then
       echo ""
       echo "  Features:"
-      awk '
-        /"id"/ { id=$0; gsub(/.*:.*"/, "", id); gsub(/".*/, "", id) }
-        /"title"/ { title=$0; gsub(/.*:.*"/, "", title); gsub(/".*/, "", title) }
-        /"status"/ { status=$0; gsub(/.*:.*"/, "", status); gsub(/".*/, "", status); if (id && title) printf "    %-12s %s: %s\n", status, id, title; id=""; title="" }
-      ' feature_list.json 2>/dev/null | sort || true
+      echo "$features_section" | awk '
+        /"id"/ { id=$0; gsub(/.*: "/, "", id); gsub(/".*/, "", id) }
+        /"title"/ { title=$0; gsub(/.*: "/, "", title); gsub(/".*/, "", title) }
+        /"status"/ { status=$0; gsub(/.*: "/, "", status); gsub(/".*/, "", status); if (id && title) printf "    %-12s %s: %s\n", status, id, title; id=""; title="" }
+      ' 2>/dev/null | sort || true
+
+      # Show blocked reasons if any
+      if [ "$blocked" -gt 0 ]; then
+        echo ""
+        log_warn "Blocked features (需要你介入):"
+        echo "$features_section" | awk '
+          /"id"/ { id=$0; gsub(/.*: "/, "", id); gsub(/".*/, "", id) }
+          /"blocked_reason"/ { reason=$0; gsub(/.*: "/, "", reason); gsub(/".*/, "", reason); if (id && reason) printf "    %s: %s\n", id, reason; id="" }
+        ' 2>/dev/null || true
+        echo "  解决后告诉 AI: \"继续 <功能ID>\" 或 \"先做下一个功能\""
+      fi
     fi
 
     # Plan file status
@@ -427,6 +480,13 @@ cmd_status() {
   customized_count="$(config_read_array ".harness/config.json" "customized_files" | wc -l | tr -d ' ')"
   echo ""
   log_info "Customized files: ${customized_count}"
+
+  # History count
+  local history_count=0
+  if [ -d ".harness/histories" ]; then
+    history_count="$(find .harness/histories -name "*.md" 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+  log_info "Change histories: ${history_count}"
 
   # Check for newer version
   echo ""
@@ -854,7 +914,7 @@ cmd_upgrade() {
 
   # Upgrade reference docs
   log_info "Checking reference docs..."
-  local ref_files=(method-map.md initializer-agent-playbook.md coding-agent-startup-flow.md prompt-calibration.md index.md planning-methodology.md review-checklist.md testing-strategy.md)
+  local ref_files=(method-map.md initializer-agent-playbook.md coding-agent-startup-flow.md prompt-calibration.md index.md planning-methodology.md review-checklist.md testing-strategy.md human-guide.md)
   mkdir -p .harness/reference
   for f in "${ref_files[@]}"; do
     if [ "$local_mode" = true ]; then
@@ -981,6 +1041,9 @@ PLAN
   fi
 
   log_success "Created plan: ${plan_file}"
+  echo ""
+  echo "Copy this path for feature_list.json plan_file field:"
+  echo "  ${plan_file}"
 }
 
 # ── New-history command
@@ -1045,60 +1108,6 @@ HISTORY
   fi
 
   log_success "Created history: ${hist_file}"
-}
-
-# ── Report command
-cmd_report() {
-  if [ ! -f ".harness/config.json" ]; then
-    log_error "Project not initialized. Run 'harness init' first."
-    exit 1
-  fi
-
-  local project_name harness_version
-  project_name="$(config_read_field ".harness/config.json" "project_name")"
-  harness_version="$(config_read_field ".harness/config.json" "harness_version")"
-
-  echo ""
-  log_info "Harness Report: ${project_name}"
-  log_info "Version: ${harness_version}"
-  echo ""
-
-  # Feature progress
-  if [ -f "feature_list.json" ]; then
-    local passing=0 in_progress=0 blocked=0 not_started=0
-    passing="$(grep -c '"passing"' feature_list.json 2>/dev/null || echo 0)"
-    in_progress="$(grep -c '"in_progress"' feature_list.json 2>/dev/null || echo 0)"
-    blocked="$(grep -c '"blocked"' feature_list.json 2>/dev/null || echo 0)"
-    not_started="$(grep -c '"not_started"' feature_list.json 2>/dev/null || echo 0)"
-    local total=$((passing + in_progress + blocked + not_started))
-
-    echo "  功能进度 (${total} total):"
-    echo "    passing:      ${passing}"
-    echo "    in_progress:  ${in_progress}"
-    echo "    blocked:      ${blocked}"
-    echo "    not_started:  ${not_started}"
-  else
-    echo "  功能进度: feature_list.json not found"
-  fi
-
-  echo ""
-
-  # History count
-  local history_count=0
-  if [ -d ".harness/histories" ]; then
-    history_count="$(find .harness/histories -name "*.md" 2>/dev/null | wc -l | tr -d ' ')"
-  fi
-  echo "  变更历史: ${history_count} file(s)"
-
-  echo ""
-
-  # Customized files count
-  local customized_count=0
-  customized_count="$(config_read_array ".harness/config.json" "customized_files" | wc -l | tr -d ' ')"
-  echo "  定制文件: ${customized_count}"
-
-  echo ""
-  log_info "Report complete."
 }
 
 # ── Doctor command
@@ -1330,6 +1339,74 @@ cmd_complete_plan() {
   log_success "Completed plan: $(basename "$plan_file")"
 }
 
+# ── Query command (search events.jsonl)
+cmd_query() {
+  local events_file=".harness/world/events.jsonl"
+  if [ ! -f "$events_file" ]; then
+    log_error "No events file found. Run 'harness init' first."
+    exit 1
+  fi
+
+  if [ ! -s "$events_file" ]; then
+    log_info "No events recorded yet."
+    exit 0
+  fi
+
+  local pattern="${1:-}"
+  local since=""
+
+  # Parse flags
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --today)
+        since="$(date +%Y-%m-%dT00:00:00)"
+        shift
+        ;;
+      --since)
+        since="$2"
+        shift 2
+        ;;
+      *)
+        pattern="$1"
+        shift
+        ;;
+    esac
+  done
+
+  local results=""
+  if [ -n "$since" ]; then
+    results="$(grep -E "\"ts\":\"${since}" "$events_file" 2>/dev/null || true)"
+    if [ -z "$results" ]; then
+      # Try date prefix match
+      results="$(awk -v since="$since" '$0 ~ "\"ts\":\"" since { print }' "$events_file" 2>/dev/null || true)"
+    fi
+  elif [ -n "$pattern" ]; then
+    results="$(grep "$pattern" "$events_file" 2>/dev/null || true)"
+  else
+    results="$(cat "$events_file")"
+  fi
+
+  if [ -z "$results" ]; then
+    log_info "No matching events found."
+    exit 0
+  fi
+
+  # Format output
+  echo "$results" | while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    ts="$(echo "$line" | grep -o '"ts":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/' || true)"
+    evt="$(echo "$line" | grep -o '"event":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/' || true)"
+    feat="$(echo "$line" | grep -o '"feature":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/' || true)"
+    result="$(echo "$line" | grep -o '"result":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/' || true)"
+    reason="$(echo "$line" | grep -o '"reason":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/' || true)"
+    msg="  ${ts}  ${evt}"
+    [ -n "$feat" ] && msg="${msg}  ${feat}"
+    [ -n "$result" ] && msg="${msg} → ${result}"
+    [ -n "$reason" ] && msg="${msg} (${reason})"
+    echo "$msg"
+  done
+}
+
 # ── Main dispatch
 case "${1:-help}" in
   version|--version|-v) cmd_version ;;
@@ -1344,10 +1421,11 @@ case "${1:-help}" in
   upgrade)              shift; cmd_upgrade "$@" ;;
   new-plan)             shift; cmd_new_plan "$@" ;;
   new-history)          shift; cmd_new_history "$@" ;;
-  report)               shift; cmd_report "$@" ;;
+  report)               shift; cmd_status "$@" ;;
   doctor)               shift; cmd_doctor "$@" ;;
   changelog)            shift; cmd_changelog "$@" ;;
   reset-status)         shift; cmd_reset_status "$@" ;;
   complete-plan)        shift; cmd_complete_plan "$@" ;;
+  query)                shift; cmd_query "$@" ;;
   *)                    echo "harness: unknown command '$1'" >&2; cmd_help >&2; exit 1 ;;
 esac

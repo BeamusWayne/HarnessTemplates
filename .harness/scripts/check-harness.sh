@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 FIX_MODE=false; [ "${1:-}" = "--fix" ] && FIX_MODE=true
-REQUIRED_FILES=(CLAUDE.md AGENTS.md init.sh feature_list.json claude-progress.md .harness/config.json)
+REQUIRED_FILES=(CLAUDE.md init.sh feature_list.json claude-progress.md .harness/config.json)
 errors=0; warnings=0
 echo "==> Harness 完整性检查"
 echo "  [必需文件]"

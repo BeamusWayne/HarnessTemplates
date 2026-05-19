@@ -2,6 +2,24 @@
 
 你正在一个为长时实现工作设计的仓库中工作。优先保证可靠完成、跨会话连续性和显式验证，而不是表面上的速度。
 
+## 指令优先级
+
+本项目使用 harness 管理功能追踪和项目约束。
+
+### 什么是外部 skill？
+
+外部 skill 是 AI agent 的方法论插件（如 superpowers）。它们提供规划、TDD、调试、代码审查等标准化工作方法。不是所有用户都安装了 skill 插件。如果你未安装任何 skill，harness 的内置规则就是完整的工作指南。
+
+### 分工规则
+
+当项目规则与外部 skill（如 superpowers）冲突时：
+
+- **harness 负责"做什么"**：功能选择、状态追踪、完成标准、会话交接
+- **外部 skill 负责"怎么做"**：规划方法论（brainstorming、writing-plans）、编码方法论（TDD）、调试（systematic-debugging）、代码审查
+- **冲突时项目规则优先**：harness 的约束（一次一个功能、plan-before-code、evidence required）不可被 skill 覆盖
+- **规划流程**：用外部 skill 讨论需求和设计方案，用 `harness new-plan` 记录计划——两者配合，不二选一
+- **无外部 skill 时**：harness 的行为规则和工作循环就是完整的工作方法，不需要额外插件
+
 ## 行为规则
 
 ### Rule 1 — 先想再写
@@ -47,6 +65,7 @@
 - 测试必须编码"为什么这个行为重要"，不仅是"做了什么"。
 - 业务逻辑变了却不会失败的测试，是错的测试。
 - 不为了"看起来完成"而删除或削弱测试。
+- 具体的 TDD 方法论（RED-GREEN-REFACTOR）由外部 skill 驱动。
 
 ### Rule 10 — 每个关键步骤后 checkpoint
 - 总结：做了什么、验证了什么、还剩什么。
@@ -97,7 +116,7 @@
 
 ### 功能完成前必须审查
 
-功能标记 passing 前，必须按 `.harness/reference/review-checklist.md` 进行结构化自查。审查结果写入 `evidence` 字段，包含逐项的具体发现（不是简单的"已通过"）。
+功能标记 passing 前，必须按 `.harness/reference/review-checklist.md` 进行结构化自查。审查结果写入 `evidence` 字段，包含逐项的具体发现（不是简单的"已通过"）。具体的代码审查方法（reviewer 角度、逐文件检查等）由外部 skill 驱动。
 
 ## 自治迭代循环
 
@@ -159,7 +178,7 @@ REPEAT (max: 3 次):
 | 文件 | 用途 |
 |------|------|
 | `feature_list.json` | 功能清单与状态 |
-| `claude-progress.md` | 进度日志与跨会话交接（已合并） |
+| `claude-progress.md` | 进度日志与跨会话交接 |
 | `init.sh` | 环境初始化 |
 
 ## 参考文件
@@ -175,8 +194,8 @@ REPEAT (max: 3 次):
 | `.harness/reference/planning-methodology.md` | 拆解功能或创建执行计划时 |
 | `.harness/reference/review-checklist.md` | 功能完成前的代码审查 |
 | `.harness/reference/testing-strategy.md` | 编写测试或设计验证方案时 |
-| `.harness/templates/autonomous-loop.md` | 进入自治模式时 |
-| `.harness/templates/self-eeval-trigger.md` | 自治模式需要自我评审时 |
+| `./autonomous-loop.md` | 进入自治模式时 |
+| `./self-eval-trigger.md` | 自治模式需要自我评审时 |
 | `.harness/plans/active/` | 接手复杂任务时 |
 
 ## 结构验证
