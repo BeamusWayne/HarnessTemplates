@@ -45,7 +45,7 @@
 ## 必需文件
 
 - `feature_list.json`：功能状态的唯一事实来源
-- `claude-progress.md`：会话进度、当前已验证状态与跨会话交接摘要（已合并 session-handoff 功能）
+- `claude-progress.md`：会话进度、当前已验证状态与跨会话交接摘要
 - `init.sh`：统一的启动与验证入口
 
 ## 完成定义
@@ -130,8 +130,8 @@
 | `.harness/reference/planning-methodology.md` | 拆解功能或创建执行计划时 |
 | `.harness/reference/review-checklist.md` | 功能完成前的代码审查 |
 | `.harness/reference/testing-strategy.md` | 编写测试或设计验证方案时 |
-| `.harness/templates/autonomous-loop.md` | 进入自治模式时 |
-| `.harness/templates/self-eval-trigger.md` | 自治模式需要自我评审时 |
+| `./autonomous-loop.md` | 进入自治模式时 |
+| `./self-eval-trigger.md` | 自治模式需要自我评审时 |
 | `.harness/plans/active/` | 接手复杂任务时 |
 
 ## 结构验证
