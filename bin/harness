@@ -40,6 +40,10 @@ HARNESS_VERSION="2.1.0"
 HARNESS_REPO="BeamusWayne/HarnessTemplates"
 HARNESS_BRANCH="main"
 
+# Canonical framework file set — deployed to the project root and auto-updated
+# by upgrade. Single source of truth for cmd_init and cmd_upgrade's migration.
+FRAMEWORK_FILES=(CLAUDE.md AGENTS.md init.sh evaluator-rubric.md autonomous-loop.md self-eval-trigger.md)
+
 # ── Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -183,7 +187,7 @@ cmd_init() {
     fi
   fi
 
-  local framework_files=(CLAUDE.md AGENTS.md init.sh evaluator-rubric.md autonomous-loop.md self-eval-trigger.md)
+  local framework_files=("${FRAMEWORK_FILES[@]}")
   local data_files=(feature_list.json claude-progress.md)
   local scaffold_files=(plan-template.md history-template.md)
 
@@ -772,6 +776,17 @@ cmd_adopt() {
   cmd_uncustomize "$filename"
 }
 
+# Helper: ensure a filename is listed in config.json's file_categories.framework
+_add_framework_to_config() {
+  local cfg=".harness/config.json"
+  local file="$1"
+  # already present in the framework array?
+  grep -q "\"framework\"[^]]*\"${file}\"" "$cfg" 2>/dev/null && return 0
+  # insert right after the framework array's opening bracket
+  sed "s/\(\"framework\"[[:space:]]*:[[:space:]]*\[\)/\1\"${file}\", /" "$cfg" > "${cfg}.tmp" \
+    && mv "${cfg}.tmp" "$cfg"
+}
+
 # ── Upgrade command
 cmd_upgrade() {
   if [ ! -f ".harness/config.json" ]; then
@@ -844,6 +859,31 @@ cmd_upgrade() {
 
   echo ""
   log_info "Checking framework files..."
+
+  # ── Migration: deploy canonical framework files this project predates.
+  # Projects initialized before a framework file existed (e.g. AGENTS.md) have
+  # it neither on disk nor in their config. Without this step, upgrading
+  # CLAUDE.md to its `@AGENTS.md` pointer would dangle and AGENTS.md would
+  # never be deployed. Deploy + register any missing canonical file first.
+  for f in "${FRAMEWORK_FILES[@]}"; do
+    if echo "$framework_files" | grep -Fqx "$f"; then continue; fi
+    local mig_src=""
+    if [ "$local_mode" = true ]; then
+      [ -f "${upgrade_src}/${f}" ] && mig_src="${upgrade_src}/${f}"
+    elif fetch_template_to ".harness/templates/${f}" "${upgrade_src}/${f}" 2>/dev/null; then
+      mig_src="${upgrade_src}/${f}"
+    fi
+    [ -n "$mig_src" ] && [ -f "$mig_src" ] || continue
+    if [ "$dry_run" = false ]; then
+      [ -f "./${f}" ] || cp "$mig_src" "./${f}"
+      cp "$mig_src" ".harness/templates/${f}"
+      _add_framework_to_config "$f"
+    fi
+    log_success "  migrated: registered framework file ${f}"
+    ((updated++)) || true
+  done
+  # refresh the framework list so the loop below also sees any newly-added file
+  framework_files="$(config_read_array ".harness/config.json" "framework")"
 
   for f in $framework_files; do
     [ -z "$f" ] && continue
