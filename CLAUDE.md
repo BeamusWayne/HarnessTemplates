@@ -13,12 +13,12 @@
 ## 代码结构
 
 ```
-bin/harness                    # CLI 主文件（单文件，~1475 行 bash）
+bin/harness                    # CLI 主文件（单文件，~1.4k 行 bash）
 install.sh                     # curl | bash 安装器
 .harness/
 ├── templates/                 # 部署到用户项目的模板文件
-│   ├── CLAUDE.md              # 用户项目的 AI 指令（不是这个文件！）
-│   ├── AGENTS.md              # 其他 agent 的指令
+│   ├── AGENTS.md              # 用户项目 AI 指令的唯一事实来源（不是这个文件！）
+│   ├── CLAUDE.md              # 指针，@import AGENTS.md
 │   ├── init.sh                # 用户项目的环境初始化脚本
 │   ├── feature_list.json      # 功能追踪模板
 │   ├── claude-progress.md     # 进度日志模板

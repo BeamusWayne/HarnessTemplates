@@ -7,7 +7,7 @@
 │                        HarnessTemplates Repo                        │
 │                                                                     │
 │  bin/harness ────────────────────────────────────────────────────── │
-│  (single-file CLI, ~1475 lines bash)                               │
+│  (single-file CLI, ~1.4k lines bash)                               │
 │       │                                                             │
 │       ├── cmd_init()          deploy templates ──► user project     │
 │       ├── cmd_upgrade()       pull upstream updates                 │
@@ -28,7 +28,8 @@
 │                         User's Project                              │
 │                                                                     │
 │  Root files (from templates):                                       │
-│    CLAUDE.md               AI agent root instructions               │
+│    AGENTS.md               canonical agent instructions (all rules) │
+│    CLAUDE.md               pointer → imports AGENTS.md               │
 │    init.sh                 environment init (install/verify/start)   │
 │    feature_list.json       feature tracking with status             │
 │    claude-progress.md      cross-session progress log               │
@@ -67,7 +68,7 @@ User runs: harness init [--local]
              default → fetch from GitHub raw URL
   5. Copy data files → project root (2 files)
   6. Copy scaffold templates → .harness/templates/
-  7. Copy reference docs → .harness/reference/ (8 files)
+  7. Copy reference docs → .harness/reference/ (9 files)
   8. Copy hook scripts → .harness/scripts/ (5 files)
   9. Deploy .claude/settings.local.json (hooks config)
  10. Install .git/hooks/pre-commit

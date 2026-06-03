@@ -77,7 +77,7 @@ harness upgrade --local --dry-run
 ## Codebase Structure
 
 ```
-bin/harness              # CLI entry point (~1475 lines, single file)
+bin/harness              # CLI entry point (~1.4k lines, single file)
 install.sh               # curl | bash installer
 .harness/templates/      # Template files deployed to user projects
 .harness/scripts/        # Hook scripts deployed to user projects
@@ -142,7 +142,7 @@ The harness treats user project files in three categories:
 
 | Category | Examples | Upgrade behavior |
 |----------|----------|------------------|
-| Framework | CLAUDE.md, init.sh | Auto-updated unless customized |
+| Framework | AGENTS.md, CLAUDE.md, init.sh | Auto-updated unless customized |
 | Data | feature_list.json, claude-progress.md | Never touched |
 | Scaffold | plan-template.md | Added if missing |
 

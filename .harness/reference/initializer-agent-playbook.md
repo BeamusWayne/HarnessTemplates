@@ -10,7 +10,7 @@
 
 初始化阶段至少应该留下这些工件：
 
-- 一个根指令文件，例如 `AGENTS.md` 或 `CLAUDE.md`
+- 一个根指令文件（`AGENTS.md` 为唯一事实来源，`CLAUDE.md` 指针 import 它）
 - 一个机器可读的功能面，例如 `feature_list.json`
 - 一个持久进度工件，例如 `claude-progress.md`
 - 一个标准启动辅助脚本，例如 `init.sh`

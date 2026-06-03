@@ -23,9 +23,8 @@ harness init
 
 | 你需要关心的 | 不用管的 |
 |-------------|---------|
-| `feature_list.json` — 功能清单 | `CLAUDE.md` — AI 的行为规则 |
-| `claude-progress.md` — 进度日志 | `AGENTS.md` — 其他 agent 的规则 |
-| | `autonomous-loop.md` — 自治协议 |
+| `feature_list.json` — 功能清单 | `AGENTS.md` — AI 的行为规则（`CLAUDE.md` 指向它） |
+| `claude-progress.md` — 进度日志 | `autonomous-loop.md` — 自治协议 |
 | | `evaluator-rubric.md` — 评分表 |
 | | `self-eval-trigger.md` — 自评触发 |
 | | `.harness/` — 全部内部文件 |

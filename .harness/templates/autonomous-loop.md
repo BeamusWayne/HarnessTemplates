@@ -8,6 +8,7 @@
 
 ## 循环
 
+```
 WHILE 还有未完成功能 AND 未触发升级条件:
   feature <- 下一个最高优先级 not_started 功能
   feature.status <- in_progress
@@ -55,6 +56,7 @@ ESCALATE_IF_TOKEN_LOW(autonomous_config.stop_on_budget_remaining_percent)
 
 // 所有功能处理完毕
 REPORT_SUMMARY()
+```
 
 ## 退出条件
 
@@ -69,7 +71,7 @@ REPORT_SUMMARY()
 | 连续 >= N 个功能 blocked | 停止，报告阻塞原因 |
 | 单个功能达到最大迭代次数 | 标记 blocked，尝试下一个功能 |
 | ./init.sh health 失败 | 立即停止，报告环境问题 |
-| Token 预算 < 20% | 完成当前功能收尾，停止 |
+| Token 预算 < 15% | 完成当前功能收尾，停止 |
 | 连续 2 次提交 diff 相似度 > 80% | 停止，报告疑似死循环 |
 | 任何修改导致之前 passing 的功能失败 | 立即回滚该修改，标记当前 blocked |
 
@@ -88,7 +90,7 @@ REPORT_SUMMARY()
 
 ## 输出报告模板
 
-## 自治工作总结
+### 自治工作总结
 
 **模式：** 自治迭代
 **开始时间：** YYYY-MM-DD HH:MM

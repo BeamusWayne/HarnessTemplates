@@ -47,12 +47,29 @@ case "${1:-default}" in
   health)
     echo "==> [健康检查] 目录: $PWD"
     PORT="${APP_PORT:-3000}"
-    if command -v lsof &> /dev/null && lsof -i ":$PORT" > /dev/null 2>&1; then
-      echo "WARN: 端口 $PORT 已被占用"
-    else
-      echo "  OK: 端口 $PORT 可用"
+    # 端口探测：有界执行，slow/hanging lsof 也不会冻住健康检查（最多等约 2 秒）
+    if command -v lsof > /dev/null 2>&1; then
+      _port_out="$(mktemp)"
+      lsof -nP -iTCP:"$PORT" -sTCP:LISTEN > "$_port_out" 2>/dev/null &
+      _lsof_pid=$!
+      disown "$_lsof_pid" 2>/dev/null || true
+      _waited=0
+      while kill -0 "$_lsof_pid" 2>/dev/null && [ "$_waited" -lt 20 ]; do
+        sleep 0.1; _waited=$((_waited + 1))
+      done
+      if kill -0 "$_lsof_pid" 2>/dev/null; then
+        kill "$_lsof_pid" 2>/dev/null || true
+        echo "  OK: 端口 $PORT 检查超时，跳过"
+      elif [ -s "$_port_out" ]; then
+        echo "WARN: 端口 $PORT 已被占用"
+      else
+        echo "  OK: 端口 $PORT 可用"
+      fi
+      rm -f "$_port_out"
     fi
-    if [ -n "$VERIFY_CMD" ] && eval "$VERIFY_CMD" > /dev/null 2>&1; then
+    if [ -z "$VERIFY_CMD" ]; then
+      echo "  SKIP: 未配置 verify 命令，跳过基础验证"
+    elif eval "$VERIFY_CMD" > /dev/null 2>&1; then
       echo "  OK: 基础验证通过"
     else
       echo "FAIL: 基础验证失败"; exit 1
