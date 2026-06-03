@@ -82,7 +82,7 @@ harness status              # 查看功能进度
 harness query --today       # 今天的事件日志（会话开始/结束、状态变更）
 harness doctor              # 诊断问题（文件缺失、版本过旧等）
 harness upgrade             # 更新模板到最新版本
-harness customize CLAUDE.md # 标记文件为已定制（upgrade 时不覆盖）
+harness customize AGENTS.md # 标记文件为已定制（upgrade 时不覆盖）
 ```
 
 ### 定制
@@ -91,13 +91,13 @@ harness customize CLAUDE.md # 标记文件为已定制（upgrade 时不覆盖）
 
 | 文件 | 什么时候定制 |
 |------|------------|
-| `CLAUDE.md` | 想给 AI 加项目特有的规则（比如"所有 API 必须有 rate limiting"） |
+| `AGENTS.md` | 想给 AI 加项目特有的规则（比如"所有 API 必须有 rate limiting"） |
 | `init.sh` | 默认检测的安装/测试命令不对你的项目 |
 
 定制方法：
 ```bash
-harness customize CLAUDE.md   # 标记为已定制
-# 然后编辑 CLAUDE.md
+harness customize AGENTS.md   # 标记为已定制
+# 然后编辑 AGENTS.md
 # 之后 harness upgrade 不会覆盖它
 ```
 

@@ -91,8 +91,8 @@ harness customize AGENTS.md
 # 更新模板
 harness upgrade                   # 交互式更新
 harness upgrade --auto            # 自动更新未定制文件
-harness diff CLAUDE.md            # 查看差异
-harness adopt CLAUDE.md           # 接受上游版本
+harness diff AGENTS.md            # 查看差异
+harness adopt AGENTS.md           # 接受上游版本
 
 # 诊断问题
 harness doctor                    # 全面诊断
@@ -117,7 +117,7 @@ AI 在工作过程中会自动：
 
 ```bash
 # 标记文件为已定制（upgrade 时不覆盖）
-harness customize CLAUDE.md
+harness customize AGENTS.md
 
 # 编辑文件
 # ...
