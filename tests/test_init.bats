@@ -110,3 +110,19 @@ teardown() {
   assert_exit_code 0
   assert_file_contains ".harness/config.json" "cargo test"
 }
+
+@test "harness init writes valid config.json even with a quote in the directory name" {
+  mkdir 'weird"name'
+  cd 'weird"name'
+  run "$HARNESS_BIN" init --local
+  assert_exit_code 0
+  if command -v python3 >/dev/null 2>&1; then
+    run python3 -c "import json; json.load(open('.harness/config.json'))"
+    assert_exit_code 0
+  elif command -v node >/dev/null 2>&1; then
+    run node -e "JSON.parse(require('fs').readFileSync('.harness/config.json','utf8'))"
+    assert_exit_code 0
+  else
+    skip "no JSON parser available"
+  fi
+}

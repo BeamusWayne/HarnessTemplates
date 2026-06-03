@@ -31,6 +31,15 @@ teardown() {
   [ -n "$plan_file" ] || { echo "FAIL: plan not created"; return 1; }
 }
 
+@test "harness new-plan sanitizes slashes in the name (stays one flat file)" {
+  "$HARNESS_BIN" init --local
+  run "$HARNESS_BIN" new-plan "a/b"
+  assert_exit_code 0
+  assert_output_contains "Created plan"
+  # slash sanitized to '-': a single flat file in active/, not a nested a/ dir
+  [ -n "$(find .harness/plans/active -maxdepth 1 -name '*a-b*.md')" ]
+}
+
 @test "harness new-plan plan file contains template content" {
   "$HARNESS_BIN" init --local
   "$HARNESS_BIN" new-plan auth-refactor
