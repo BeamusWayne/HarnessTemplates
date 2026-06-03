@@ -195,18 +195,18 @@ harness upgrade [--auto] [--dry-run] [--local]
 ## Customization Tracking
 
 ```
-harness customize CLAUDE.md
-  → adds "CLAUDE.md" to config.json customized_files[]
+harness customize AGENTS.md
+  → adds "AGENTS.md" to config.json customized_files[]
   → upgrade skips this file (or shows interactive diff)
 
-harness uncustomize CLAUDE.md
+harness uncustomize AGENTS.md
   → removes from customized_files[]
   → upgrade will auto-update this file
 
-harness diff CLAUDE.md
-  → compares project root CLAUDE.md vs .harness/templates/CLAUDE.md
+harness diff AGENTS.md
+  → compares project root AGENTS.md vs .harness/templates/AGENTS.md
 
-harness adopt CLAUDE.md
-  → copies .harness/templates/CLAUDE.md to project root
+harness adopt AGENTS.md
+  → copies .harness/templates/AGENTS.md to project root
   → removes from customized_files[]
 ```
