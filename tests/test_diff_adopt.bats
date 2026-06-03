@@ -39,8 +39,10 @@ teardown() {
   "$HARNESS_BIN" customize CLAUDE.md
   run "$HARNESS_BIN" adopt CLAUDE.md
   assert_exit_code 0
-  # File should no longer be in customized_files array
+  # File should no longer be in customized_files array. Check only the
+  # customized_files line — a sed range would over-reach into the framework
+  # array (which legitimately lists CLAUDE.md).
   local customized
-  customized="$(sed -n '/"customized_files"/,/\]/p' .harness/config.json | grep -o '"CLAUDE.md"' || true)"
+  customized="$(grep '"customized_files"' .harness/config.json | grep -o '"CLAUDE.md"' || true)"
   [ -z "$customized" ]
 }
