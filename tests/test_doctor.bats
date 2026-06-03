@@ -32,7 +32,7 @@ teardown() {
 
 @test "harness doctor reports stale version" {
   "$HARNESS_BIN" init --local
-  sed -i.bak 's/"harness_version": "2.1.0"/"harness_version": "0.0.1"/' .harness/config.json
+  sed -i.bak 's/"harness_version": "[^"]*"/"harness_version": "0.0.1"/' .harness/config.json
   rm -f .harness/config.json.bak
   run "$HARNESS_BIN" doctor
   assert_output_contains "旧"

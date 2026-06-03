@@ -24,6 +24,7 @@ set -euo pipefail
 #   cmd_query           — search events.jsonl
 #   cmd_report          — status summary + event timeline
 #   cmd_reset_status    — reset feature_list.json to initial state
+#   cmd_self_update     — replace the installed CLI with the latest upstream
 #   cmd_status          — show project status and feature progress
 #   cmd_uncustomize     — remove customization mark from file
 #   cmd_upgrade         — pull upstream template updates
@@ -36,7 +37,7 @@ set -euo pipefail
 #   feature_status_change, verification_result, escalation  (written by AI)
 # ────────────────────────────────────────────────────────────────
 
-HARNESS_VERSION="2.1.0"
+HARNESS_VERSION="2.2.0"
 HARNESS_REPO="BeamusWayne/HarnessTemplates"
 HARNESS_BRANCH="main"
 
@@ -116,6 +117,48 @@ cmd_version() {
   echo "harness v${HARNESS_VERSION}"
 }
 
+# ── Self-update: replace the installed CLI binary with the latest upstream.
+# `harness upgrade` updates a project's templates — it does NOT update the CLI
+# itself, so this is the way to pick up a newer harness.
+# HARNESS_SELF_TARGET / HARNESS_SELF_SOURCE override the destination / download
+# URL (used by tests; default to the running binary and the GitHub raw URL).
+cmd_self_update() {
+  local target="${HARNESS_SELF_TARGET:-}"
+  if [ -z "$target" ]; then
+    target="$(command -v harness 2>/dev/null || true)"
+    [ -z "$target" ] && target="${BASH_SOURCE[0]}"
+  fi
+
+  local src_url="${HARNESS_SELF_SOURCE:-$(template_raw_url "bin/harness")}"
+  log_info "Updating harness CLI: ${target}"
+
+  local tmp
+  tmp="$(mktemp)"
+  if ! curl -fsSL "$src_url" -o "$tmp" 2>/dev/null || [ ! -s "$tmp" ]; then
+    rm -f "$tmp"
+    log_error "下载失败 (网络不可用？)"
+    exit 1
+  fi
+  # Sanity-check the payload BEFORE overwriting anything (avoid replacing the
+  # CLI with an error page or truncated download).
+  if ! grep -q '^HARNESS_VERSION=' "$tmp"; then
+    rm -f "$tmp"
+    log_error "下载内容不像 harness CLI，已中止（未改动现有 CLI）"
+    exit 1
+  fi
+  local new_version
+  new_version="$(grep '^HARNESS_VERSION=' "$tmp" | head -1 | sed 's/.*="//;s/"//')"
+  chmod +x "$tmp"
+  if mv "$tmp" "$target" 2>/dev/null; then
+    log_success "harness CLI 已更新到 v${new_version}"
+    echo "    项目模板请用 'harness upgrade' 更新。"
+  else
+    rm -f "$tmp"
+    log_error "无法写入 ${target}（权限不足？）。手动覆盖或重跑 install.sh"
+    exit 1
+  fi
+}
+
 cmd_help() {
   cat <<'HELP'
 harness — AI coding agent 脚手架管理工具
@@ -140,6 +183,7 @@ harness — AI coding agent 脚手架管理工具
   query [pattern]   查询事件日志（--today, --since）
   report            工作总结（status + 事件时间线 + 变更统计）
   version           显示版本
+  self-update       更新 harness CLI 本体（区别于 upgrade 更新模板）
   help              显示帮助
 
 选项:
@@ -517,7 +561,8 @@ cmd_status() {
       log_warn "无法检查远程版本 (网络不可用)"
     elif [ "$latest_version" != "$harness_version" ]; then
       log_warn "有新版本可用: ${latest_version} (当前: ${harness_version})"
-      echo "    运行 'harness upgrade' 更新"
+      echo "    更新 CLI:  harness self-update"
+      echo "    更新模板:  harness upgrade"
     else
       log_success "版本已是最新: ${harness_version}"
     fi
@@ -878,8 +923,10 @@ cmd_upgrade() {
       [ -f "./${f}" ] || cp "$mig_src" "./${f}"
       cp "$mig_src" ".harness/templates/${f}"
       _add_framework_to_config "$f"
+      log_success "  migrated: registered framework file ${f}"
+    else
+      log_info "  would migrate: ${f} (new framework file)"
     fi
-    log_success "  migrated: registered framework file ${f}"
     ((updated++)) || true
   done
   # refresh the framework list so the loop below also sees any newly-added file
@@ -1545,5 +1592,6 @@ case "${1:-help}" in
   reset-status)         shift; cmd_reset_status "$@" ;;
   complete-plan)        shift; cmd_complete_plan "$@" ;;
   query)                shift; cmd_query "$@" ;;
+  self-update)          shift; cmd_self_update "$@" ;;
   *)                    echo "harness: unknown command '$1'" >&2; cmd_help >&2; exit 1 ;;
 esac

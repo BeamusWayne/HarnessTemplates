@@ -54,6 +54,7 @@ your-project/
 |------|------|
 | `harness init` | 初始化项目（一行命令生成所有文件） |
 | `harness upgrade` | 拉取上游模板更新（交互式处理定制文件） |
+| `harness self-update` | 更新 harness CLI 本体（`upgrade` 只更新模板，不更新 CLI） |
 | `harness status` | 显示版本、功能进度、定制情况 |
 | `harness check` | 运行结构完整性检查（`--fix` 自动修复） |
 | `harness diff <file>` | 对比项目文件与上游模板 |
