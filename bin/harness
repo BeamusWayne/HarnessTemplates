@@ -183,7 +183,7 @@ cmd_init() {
     fi
   fi
 
-  local framework_files=(CLAUDE.md init.sh evaluator-rubric.md autonomous-loop.md self-eval-trigger.md)
+  local framework_files=(CLAUDE.md AGENTS.md init.sh evaluator-rubric.md autonomous-loop.md self-eval-trigger.md)
   local data_files=(feature_list.json claude-progress.md)
   local scaffold_files=(plan-template.md history-template.md)
 
@@ -356,7 +356,7 @@ cmd_init() {
     "start": "${start_cmd}"
   },
   "file_categories": {
-    "framework": ["CLAUDE.md", "init.sh", "evaluator-rubric.md", "autonomous-loop.md", "self-eval-trigger.md"],
+    "framework": ["CLAUDE.md", "AGENTS.md", "init.sh", "evaluator-rubric.md", "autonomous-loop.md", "self-eval-trigger.md"],
     "data": ["feature_list.json", "claude-progress.md"],
     "scaffold": ["plan-template.md", "history-template.md"]
   },
@@ -1333,7 +1333,7 @@ cmd_reset_status() {
     "enabled": true,
     "max_iterations_per_feature": 5,
     "max_consecutive_blocked": 2,
-    "stop_on_budget_remaining_percent": 20,
+    "stop_on_budget_remaining_percent": 15,
     "loop_detection_threshold": 0.8,
     "auto_commit_on_passing": true,
     "auto_commit_wip": true,

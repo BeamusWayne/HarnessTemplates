@@ -27,7 +27,8 @@ harness init
 
 ```
 your-project/
-├── CLAUDE.md              # Claude Code 根指令（AI 自动读取）
+├── AGENTS.md              # agent 指令唯一事实来源（所有规则）
+├── CLAUDE.md              # 指针 → import AGENTS.md（Claude Code 自动读取）
 ├── init.sh                # 环境初始化脚本
 ├── feature_list.json      # 功能清单（AI 帮你拆解后写入）
 ├── claude-progress.md     # 跨会话进度日志
@@ -63,7 +64,7 @@ your-project/
 | `harness new-history <name>` | 创建变更记录 |
 | `harness reset-status` | 重置 feature_list.json 为待规划状态 |
 | `harness complete-plan` | 将执行计划从 active/ 移至 completed/ |
-| `harness report` | 生成工作总结（功能进度、变更统计、事件时间线） |
+| `harness report` | 工作总结：功能进度 + 变更统计 + 事件时间线 |
 | `harness query [pattern]` | 查询事件日志（`--today`、`--since`） |
 | `harness doctor` | 诊断问题（版本、文件、配置） |
 | `harness changelog` | 显示版本变更日志 |
@@ -72,7 +73,7 @@ your-project/
 
 - `--auto` — upgrade 时跳过交互，自动更新未定制文件
 - `--dry-run` — 只显示将做什么，不实际执行
-- `--fix` — check 时自动修复问题（CRLF、权限）
+- `--fix` — check 时自动修复问题（文件权限）
 - `--local` — 从本地模板复制（开发/测试用）
 - `--non-interactive` — init 时跳过交互，使用自动检测的项目配置
 
@@ -84,8 +85,8 @@ your-project/
 # 初始化
 harness init
 
-# 需要定制时（比如改 CLAUDE.md 适配你的项目）
-harness customize CLAUDE.md
+# 需要定制时（比如改 AGENTS.md 适配你的项目）
+harness customize AGENTS.md
 
 # 更新模板
 harness upgrade                   # 交互式更新
@@ -127,7 +128,7 @@ harness status
 
 | 文件 | 什么时候定制 |
 |------|------------|
-| `CLAUDE.md` | 想给 AI 加项目特有规则（如"所有 API 必须有 rate limiting"） |
+| `AGENTS.md` | 想给 AI 加项目特有规则（如"所有 API 必须有 rate limiting"） |
 | `init.sh` | 默认检测的安装/测试命令不对你的项目 |
 
 不需要定制：`feature_list.json`、`claude-progress.md`（AI 自己维护）、所有 `.harness/` 内部文件。
@@ -153,13 +154,12 @@ AI: 按功能列表逐个实现 → 每个功能先创建执行计划（.harness
 
 | 文件 | 用途 |
 |------|------|
-| `CLAUDE.md` | Claude Code 根指令文件 |
+| `AGENTS.md` | agent 指令唯一事实来源（所有规则在此） |
+| `CLAUDE.md` | 指针，`@import` AGENTS.md（供 Claude Code 读取） |
 | `init.sh` | 环境初始化脚本（支持 `health`、`verify` 子命令） |
 | `evaluator-rubric.md` | 质量评审评分表 |
 | `autonomous-loop.md` | 自治迭代循环协议 |
 | `self-eval-trigger.md` | 自我评审触发协议 |
-
-> `AGENTS.md`（Codex 等其他 agent 的指令文件）保留在 `.harness/templates/` 中，不部署到根目录。如需使用，手动复制即可。
 
 ### 数据文件（永不自动更新）
 
@@ -199,7 +199,7 @@ harness 管项目层面的"做什么"，外部 skill（如 superpowers）管方�
 | 调试方法论 | **外部 skill** | systematic-debugging |
 | 代码审查 | **外部 skill** | code-review |
 
-冲突时项目规则优先。详见 CLAUDE.md 中的"指令优先级"部分。
+冲突时项目规则优先。详见 AGENTS.md 中的"指令优先级"部分。
 
 ## 设计原则
 
@@ -237,6 +237,7 @@ hooks 自动向 `.harness/world/events.jsonl` 追加事件记录：
 | `session_end` | Stop hook | 记录会话结束时的功能进度 |
 | `feature_status_change` | AI | 功能状态切换 |
 | `verification_result` | AI | 验证结果 |
+| `escalation` | AI | 升级/阻塞通知 |
 
 查询事件：`harness query [pattern]`、`harness query --today`、`harness query --since yesterday`
 

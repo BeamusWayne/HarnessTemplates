@@ -6,7 +6,7 @@
     "enabled": true,
     "max_iterations_per_feature": 5,
     "max_consecutive_blocked": 2,
-    "stop_on_budget_remaining_percent": 20,
+    "stop_on_budget_remaining_percent": 15,
     "loop_detection_threshold": 0.8,
     "auto_commit_on_passing": true,
     "auto_commit_wip": true,

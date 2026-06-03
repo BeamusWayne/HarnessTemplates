@@ -4,9 +4,9 @@
 
 ## 怎么开始
 
-先把这四个文件复制到项目根目录：
+先把这几个文件复制到项目根目录：
 
-1. `AGENTS.md` 或 `CLAUDE.md`
+1. `AGENTS.md` + `CLAUDE.md`（规则在 AGENTS.md，CLAUDE.md 是指针）
 2. `init.sh`
 3. `claude-progress.md`
 4. `feature_list.json`
@@ -15,15 +15,15 @@
 
 ---
 
-## AGENTS.md
+## AGENTS.md（+ CLAUDE.md 指针）
 
-根指令文件。agent 每次开工会先读这个文件。它定义了工作规则：写代码前要做什么、工作过程中怎么守规矩、收尾时要检查什么。
+根指令文件，agent 工作规则的**唯一事实来源**：写代码前要做什么、工作过程中怎么守规矩、收尾时要检查什么。`CLAUDE.md` 只是一个指针——通过 `@AGENTS.md` import 把同一份规则引给 Claude Code；Codex / Cursor 等直接读 `AGENTS.md`。
 
 **怎么用：**
 
-- 复制到项目根目录
+- 把 `AGENTS.md` 和 `CLAUDE.md` 都复制到项目根目录
+- 改规则只改 `AGENTS.md`（`CLAUDE.md` 保持指针，别往里塞规则）
 - 把开工流程里的步骤换成你自己项目的路径和命令
-- 工作规则按你们团队的约定调整
 - 完成定义那一段别改——那是整个 harness 最关键的部分
 
 **它帮 agent 做什么：**
@@ -32,8 +32,6 @@
 - 逼它一次只做一个功能
 - 要求它拿出证据才能标记完成
 - 定义了什么叫"干净收尾"
-
-用 `AGENTS.md` 给 Codex 或其他 agent。用 `CLAUDE.md` 给 Claude Code——内容一样，格式按 Claude 的指令风格来的。
 
 ## init.sh
 
@@ -205,7 +203,7 @@ init.sh 已从线性脚本升级为子命令模式：
 
 ### `.harness/scripts/check-harness.sh`
 
-自动验证 harness 文件的完整性。检查必需文件是否存在、JSON 是否合法、CRLF 问题、init.sh 权限。
+自动验证 harness 文件的完整性。检查必需文件是否存在、JSON 是否合法、init.sh 权限。
 
 ### `.harness/scripts/ci.sh`
 
