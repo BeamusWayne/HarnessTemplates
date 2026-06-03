@@ -123,11 +123,22 @@ cmd_version() {
 # HARNESS_SELF_TARGET / HARNESS_SELF_SOURCE override the destination / download
 # URL (used by tests; default to the running binary and the GitHub raw URL).
 cmd_self_update() {
-  local target="${HARNESS_SELF_TARGET:-}"
-  if [ -z "$target" ]; then
-    target="$(command -v harness 2>/dev/null || true)"
-    [ -z "$target" ] && target="${BASH_SOURCE[0]}"
-  fi
+  # Update the binary that is actually running (BASH_SOURCE), not some other
+  # 'harness' that happens to be on PATH.
+  local target="${HARNESS_SELF_TARGET:-${BASH_SOURCE[0]}}"
+  # Make absolute, then follow any symlink chain so we update the real file
+  # rather than replacing a symlink with a regular file (common for dev installs
+  # that symlink ~/.local/bin/harness to a repo checkout).
+  case "$target" in /*) ;; *) target="$(pwd)/$target" ;; esac
+  local _depth=0
+  while [ -L "$target" ] && [ "$_depth" -lt 40 ]; do
+    _depth=$((_depth + 1))
+    local _link; _link="$(readlink "$target")"
+    case "$_link" in
+      /*) target="$_link" ;;
+      *)  target="$(dirname "$target")/$_link" ;;
+    esac
+  done
 
   local src_url="${HARNESS_SELF_SOURCE:-$(template_raw_url "bin/harness")}"
   log_info "Updating harness CLI: ${target}"
@@ -148,13 +159,18 @@ cmd_self_update() {
   fi
   local new_version
   new_version="$(grep '^HARNESS_VERSION=' "$tmp" | head -1 | sed 's/.*="//;s/"//')"
-  chmod +x "$tmp"
-  if mv "$tmp" "$target" 2>/dev/null; then
+
+  # Atomic replace: stage in the target's own directory (same filesystem) then
+  # rename, so a partial or cross-filesystem write can never corrupt the live CLI.
+  local staged
+  staged="$(dirname "$target")/.harness-update.$$"
+  if cp "$tmp" "$staged" 2>/dev/null && chmod +x "$staged" && mv "$staged" "$target" 2>/dev/null; then
+    rm -f "$tmp"
     log_success "harness CLI 已更新到 v${new_version}"
     echo "    项目模板请用 'harness upgrade' 更新。"
   else
-    rm -f "$tmp"
-    log_error "无法写入 ${target}（权限不足？）。手动覆盖或重跑 install.sh"
+    rm -f "$tmp" "$staged" 2>/dev/null || true
+    log_error "无法写入 ${target}（目录不可写？）。手动覆盖或重跑 install.sh"
     exit 1
   fi
 }

@@ -33,3 +33,16 @@ teardown() { teardown_test_project; }
   run grep -c "not the harness cli" target-harness
   [ "$output" = "0" ]
 }
+
+@test "self-update follows a symlink and updates the real file, not the link" {
+  printf '#!/usr/bin/env bash\nHARNESS_VERSION="9.9.9"\n' > fixture-harness
+  cp "$HARNESS_BIN" real-cli
+  ln -s "$PWD/real-cli" link-cli
+  export HARNESS_SELF_TARGET="$PWD/link-cli"
+  export HARNESS_SELF_SOURCE="file://$PWD/fixture-harness"
+  run "$HARNESS_BIN" self-update
+  unset HARNESS_SELF_TARGET HARNESS_SELF_SOURCE
+  assert_exit_code 0
+  [ -L link-cli ]                                            # the symlink is preserved
+  assert_file_contains "real-cli" 'HARNESS_VERSION="9.9.9"'  # the real file was updated
+}
