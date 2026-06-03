@@ -37,7 +37,7 @@ set -euo pipefail
 #   feature_status_change, verification_result, escalation  (written by AI)
 # ────────────────────────────────────────────────────────────────
 
-HARNESS_VERSION="2.2.0"
+HARNESS_VERSION="2.2.1"
 HARNESS_REPO="BeamusWayne/HarnessTemplates"
 HARNESS_BRANCH="main"
 
@@ -697,9 +697,18 @@ _rewrite_customized_array() {
   done
   new_line="${new_line}],"
 
-  # Use awk to replace the customized_files line range
+  # Replace the customized_files array, whether it is written on one line
+  # (`"customized_files": [],`) or spans several. The single-line case is the
+  # important one: without the inline `]` check below, `next` would skip the
+  # closing bracket on that same line, leave in_arr set, and delete everything
+  # up to the next `]` (project_commands + the framework array) — corrupting
+  # config.json.
   awk -v replacement="$new_line" '
-    /"customized_files"/ { in_arr=1; print replacement; next }
+    /"customized_files"/ {
+      print replacement
+      if ($0 ~ /\]/) next     # array closes on this line — nothing more to skip
+      in_arr=1; next          # array continues on later lines — skip until ]
+    }
     in_arr && /\]/ { in_arr=0; next }
     !in_arr { print }
   ' "$config_path" > "${config_path}.tmp"
@@ -1406,7 +1415,9 @@ cmd_changelog() {
     exit 0
   fi
 
-  echo "$commits" | grep -o '"message": *"[^"]*"' | sed 's/"message": *"//;s/"$//' | head -20
+  # GitHub returns the message as a JSON string with literal \n escapes; keep
+  # just the subject line (cut at the first \n) so the output is readable.
+  echo "$commits" | grep -o '"message": *"[^"]*"' | sed 's/"message": *"//; s/\\n.*//; s/"$//' | head -20
   echo ""
   log_info "显示最近 20 条提交。运行 'harness upgrade' 更新。"
 }

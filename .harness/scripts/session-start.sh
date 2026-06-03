@@ -20,33 +20,43 @@ if [ ! -f "feature_list.json" ]; then
   exit 0
 fi
 
-# Extract _status field
+# Parse the features array ONCE and reuse it. Scoping every lookup to this
+# section excludes the status_legend / feature_template / rules blocks, which
+# otherwise pollute id/status/reason lookups (e.g. returning the
+# feature_template's "feat-NNN" placeholder) — and avoids re-reading the file.
+_features_section="$(sed -n '/"features"[[:space:]]*:/,$ p' feature_list.json 2>/dev/null || true)"
+
+# Extract _status field (top-level)
 get_status() {
   grep -o '"_status"[[:space:]]*:[[:space:]]*"[^"]*"' feature_list.json 2>/dev/null | \
     sed 's/.*:.*"\(.*\)"/\1/' || echo ""
 }
 
-# Count features by status
+# Count features by status (features array only)
 count_status() {
-  local status="$1"
-  local _section
-  _section="$(sed -n '/"features"[[:space:]]*:/,$ p' feature_list.json 2>/dev/null || true)"
-  echo "$_section" | grep -c "\"${status}\"" 2>/dev/null || true
+  echo "$_features_section" | grep -c "\"$1\"" 2>/dev/null || true
 }
 
-# Extract blocked reason for a feature
+# Extract the first blocked feature's reason (features array only)
 get_blocked_reason() {
-  grep -A20 '"blocked"' feature_list.json 2>/dev/null | \
+  echo "$_features_section" | grep -A20 '"blocked"' 2>/dev/null | \
     grep -o '"blocked_reason"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | \
     sed 's/.*:.*"\(.*\)"/\1/' || echo ""
 }
 
-# Find feature id by status
+# Find the first feature id with the given status. Pairs id<->status per
+# feature (tracking the most recent id, emitting it when status matches), so it
+# is correct whether each feature is pretty-printed or written on one line.
 find_id_by_status() {
-  local status="$1"
-  grep -B5 "\"${status}\"" feature_list.json 2>/dev/null | \
-    grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | \
-    sed 's/.*:.*"\(.*\)"/\1/' || echo ""
+  echo "$_features_section" | awk -v want="$1" '
+    /"id"[[:space:]]*:/ {
+      t=$0; gsub(/.*"id"[[:space:]]*:[[:space:]]*"/,"",t); gsub(/".*/,"",t); id=t
+    }
+    /"status"[[:space:]]*:/ {
+      s=$0; gsub(/.*"status"[[:space:]]*:[[:space:]]*"/,"",s); gsub(/".*/,"",s)
+      if (s==want && id!="" && !done) { print id; done=1 }
+    }
+  '
 }
 
 project_name="$(basename "$(pwd)")"
