@@ -28,6 +28,12 @@ fi
 
 echo "  OK: bash + curl 可用"
 
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+  echo ""
+  echo "警告: 当前 Bash ${BASH_VERSION:-未知} 低于推荐的 4.0+。" >&2
+  echo "  harness 在 Bash 3.2 上可能行为异常。macOS 用户建议: brew install bash" >&2
+fi
+
 mkdir -p "$INSTALL_DIR"
 
 echo "==> 下载 harness CLI"

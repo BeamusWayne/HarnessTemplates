@@ -21,6 +21,8 @@ set -euo pipefail
 #   cmd_init            — initialize harness in a project
 #   cmd_new_history     — create a change history record
 #   cmd_new_plan        — create an execution plan
+#   cmd_query           — search events.jsonl
+#   cmd_report          — status summary + event timeline
 #   cmd_reset_status    — reset feature_list.json to initial state
 #   cmd_status          — show project status and feature progress
 #   cmd_uncustomize     — remove customization mark from file
@@ -30,8 +32,8 @@ set -euo pipefail
 #   _rewrite_customized_array — update customized_files in config.json
 # ────────────────────────────────────────────────────────────────
 # Event types (written to .harness/world/events.jsonl):
-#   session_start, session_end, feature_status_change,
-#   verification_result, procedure_fired, observation
+#   session_start, session_end                              (written by hooks)
+#   feature_status_change, verification_result, escalation  (written by AI)
 # ────────────────────────────────────────────────────────────────
 
 HARNESS_VERSION="2.1.0"
@@ -132,6 +134,7 @@ harness — AI coding agent 脚手架管理工具
   reset-status      重置功能清单为待规划状态
   complete-plan     将执行计划移至已完成
   query [pattern]   查询事件日志（--today, --since）
+  report            工作总结（status + 事件时间线 + 变更统计）
   version           显示版本
   help              显示帮助
 
@@ -217,10 +220,15 @@ cmd_init() {
   for f in "${data_files[@]}"; do
     if [ "$use_local" = true ]; then
       cp "${template_src}/${f}" "./${f}"
+      log_success "Copied ${f}"
     else
-      fetch_template_to ".harness/templates/${f}" "./${f}"
+      if fetch_template_to ".harness/templates/${f}" "./${f}"; then
+        log_success "Copied ${f}"
+      else
+        log_error "Failed to fetch ${f} — 数据文件缺失，初始化中止"
+        exit 1
+      fi
     fi
-    log_success "Copied ${f}"
   done
 
   # Make init.sh executable
@@ -409,6 +417,13 @@ cmd_status() {
     exit 1
   fi
 
+  local check_remote=true
+  for arg in "$@"; do
+    case "$arg" in
+      --offline|--no-check) check_remote=false ;;
+    esac
+  done
+
   local project_name harness_version
   project_name="$(config_read_field ".harness/config.json" "project_name")"
   harness_version="$(config_read_field ".harness/config.json" "harness_version")"
@@ -488,19 +503,73 @@ cmd_status() {
   fi
   log_info "Change histories: ${history_count}"
 
-  # Check for newer version
-  echo ""
-  log_info "Checking for updates..."
-  local latest_version
-  latest_version="$(curl -fsSL "https://raw.githubusercontent.com/${HARNESS_REPO}/${HARNESS_BRANCH}/bin/harness" 2>/dev/null | grep '^HARNESS_VERSION=' | head -1 | sed 's/.*="//;s/"//' || true)"
-  if [ -z "$latest_version" ]; then
-    log_warn "无法检查远程版本 (网络不可用)"
-  elif [ "$latest_version" != "$harness_version" ]; then
-    log_warn "有新版本可用: ${latest_version} (当前: ${harness_version})"
-    echo "    运行 'harness upgrade' 更新"
-  else
-    log_success "版本已是最新: ${harness_version}"
+  # Check for newer version (skip with --offline)
+  if [ "$check_remote" = true ]; then
+    echo ""
+    log_info "Checking for updates..."
+    local latest_version
+    latest_version="$(curl -fsSL "https://raw.githubusercontent.com/${HARNESS_REPO}/${HARNESS_BRANCH}/bin/harness" 2>/dev/null | grep '^HARNESS_VERSION=' | head -1 | sed 's/.*="//;s/"//' || true)"
+    if [ -z "$latest_version" ]; then
+      log_warn "无法检查远程版本 (网络不可用)"
+    elif [ "$latest_version" != "$harness_version" ]; then
+      log_warn "有新版本可用: ${latest_version} (当前: ${harness_version})"
+      echo "    运行 'harness upgrade' 更新"
+    else
+      log_success "版本已是最新: ${harness_version}"
+    fi
   fi
+}
+
+# ── Report command (status summary + event timeline + change stats)
+cmd_report() {
+  if [ ! -f ".harness/config.json" ]; then
+    log_error "Project not initialized. Run 'harness init' first."
+    exit 1
+  fi
+
+  # 1) Full status view (offline: skip the remote version round-trip)
+  cmd_status --offline
+
+  # 2) Event timeline from events.jsonl
+  echo ""
+  log_info "事件时间线 (event timeline):"
+  local events_file=".harness/world/events.jsonl"
+  if [ -f "$events_file" ] && [ -s "$events_file" ]; then
+    local total_events
+    total_events="$(wc -l < "$events_file" | tr -d ' ')"
+    echo "    总事件数: ${total_events}"
+    local evt n
+    for evt in session_start session_end feature_status_change verification_result escalation; do
+      n="$(grep -c "\"event\":\"${evt}\"" "$events_file" 2>/dev/null || true)"
+      n="${n:-0}"
+      [ "$n" -gt 0 ] && echo "    ${evt}: ${n}"
+    done
+    echo ""
+    echo "  最近事件 (最多 10 条):"
+    tail -10 "$events_file" | while IFS= read -r line; do
+      [ -z "$line" ] && continue
+      local ts evt2 feat result
+      ts="$(echo "$line" | grep -o '"ts":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/' || true)"
+      evt2="$(echo "$line" | grep -o '"event":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/' || true)"
+      feat="$(echo "$line" | grep -o '"feature":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/' || true)"
+      result="$(echo "$line" | grep -o '"result":"[^"]*"' | head -1 | sed 's/.*:"\(.*\)"/\1/' || true)"
+      local msg="    ${ts}  ${evt2}"
+      [ -n "$feat" ] && msg="${msg}  ${feat}"
+      [ -n "$result" ] && msg="${msg} → ${result}"
+      echo "$msg"
+    done
+  else
+    echo "    (暂无事件记录)"
+  fi
+
+  # 3) Change statistics
+  echo ""
+  log_info "变更统计 (change statistics):"
+  local hist_count=0 completed_plans=0
+  [ -d ".harness/histories" ] && hist_count="$(find .harness/histories -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+  [ -d ".harness/plans/completed" ] && completed_plans="$(find .harness/plans/completed -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+  echo "    变更记录: ${hist_count}"
+  echo "    已完成计划: ${completed_plans}"
 }
 
 # ── Check command
@@ -857,7 +926,7 @@ cmd_upgrade() {
 
   # Upgrade scripts (always update, backup first)
   log_info "Checking scripts..."
-  local harness_scripts=(check-harness.sh ci.sh hook-guard.sh git-pre-commit.sh)
+  local harness_scripts=(check-harness.sh ci.sh hook-guard.sh session-start.sh git-pre-commit.sh)
   for f in "${harness_scripts[@]}"; do
     local script_src=""
     if [ "$local_mode" = true ]; then
@@ -1339,6 +1408,15 @@ cmd_complete_plan() {
   log_success "Completed plan: $(basename "$plan_file")"
 }
 
+# Resolve a --since value (supports today/yesterday or a literal YYYY-MM-DD prefix)
+resolve_since() {
+  case "$1" in
+    today)     date -u +%Y-%m-%d ;;
+    yesterday) date -u -v-1d +%Y-%m-%d 2>/dev/null || date -u -d 'yesterday' +%Y-%m-%d ;;
+    *)         echo "$1" ;;
+  esac
+}
+
 # ── Query command (search events.jsonl)
 cmd_query() {
   local events_file=".harness/world/events.jsonl"
@@ -1359,11 +1437,11 @@ cmd_query() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --today)
-        since="$(date +%Y-%m-%dT00:00:00)"
+        since="$(date -u +%Y-%m-%d)"
         shift
         ;;
       --since)
-        since="$2"
+        since="$(resolve_since "$2")"
         shift 2
         ;;
       *)
@@ -1421,7 +1499,7 @@ case "${1:-help}" in
   upgrade)              shift; cmd_upgrade "$@" ;;
   new-plan)             shift; cmd_new_plan "$@" ;;
   new-history)          shift; cmd_new_history "$@" ;;
-  report)               shift; cmd_status "$@" ;;
+  report)               shift; cmd_report "$@" ;;
   doctor)               shift; cmd_doctor "$@" ;;
   changelog)            shift; cmd_changelog "$@" ;;
   reset-status)         shift; cmd_reset_status "$@" ;;
