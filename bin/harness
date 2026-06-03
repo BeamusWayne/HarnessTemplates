@@ -37,7 +37,7 @@ set -euo pipefail
 #   feature_status_change, verification_result, escalation  (written by AI)
 # ────────────────────────────────────────────────────────────────
 
-HARNESS_VERSION="2.2.1"
+HARNESS_VERSION="2.2.2"
 HARNESS_REPO="BeamusWayne/HarnessTemplates"
 HARNESS_BRANCH="main"
 
@@ -382,7 +382,9 @@ cmd_init() {
 
   # Generate .harness/config.json
   local project_name
-  project_name="$(basename "$(pwd)")"
+  # Strip the two characters that would break the JSON string we write below
+  # (a directory name may legally contain them).
+  project_name="$(basename "$(pwd)" | tr -d '"\\')"
   local timestamp
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
@@ -1162,6 +1164,7 @@ cmd_new_plan() {
     log_error "Usage: harness new-plan <name>"
     exit 1
   fi
+  name="$(printf '%s' "$name" | tr '/' '-')"   # keep the name a single path segment
 
   local timestamp
   timestamp="$(date +"%Y%m%d-%H%M")"
@@ -1239,6 +1242,7 @@ cmd_new_history() {
     log_error "Usage: harness new-history <name>"
     exit 1
   fi
+  name="$(printf '%s' "$name" | tr '/' '-')"   # keep the name a single path segment
 
   local timestamp
   timestamp="$(date +"%Y%m%d-%H%M")"
@@ -1440,7 +1444,7 @@ cmd_reset_status() {
   # Reset to awaiting_requirements with empty features
   cat > "feature_list.json" <<RESET
 {
-  "project": "$(config_read_field ".harness/config.json" "project_name")",
+  "project": "$(config_read_field ".harness/config.json" "project_name" | tr -d '"\\')",
   "_status": "awaiting_requirements",
   "last_updated": "${timestamp}",
   "autonomous_config": {
