@@ -923,8 +923,10 @@ cmd_upgrade() {
       [ -f "./${f}" ] || cp "$mig_src" "./${f}"
       cp "$mig_src" ".harness/templates/${f}"
       _add_framework_to_config "$f"
+      log_success "  migrated: registered framework file ${f}"
+    else
+      log_info "  would migrate: ${f} (new framework file)"
     fi
-    log_success "  migrated: registered framework file ${f}"
     ((updated++)) || true
   done
   # refresh the framework list so the loop below also sees any newly-added file
